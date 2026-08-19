@@ -1,0 +1,33 @@
+# Gradle and Android build output
+.gradle/
+**/.gradle/
+build/
+**/build/
+.kotlin/
+**/.kotlin/
+local.properties
+*.iml
+.idea/
+.externalNativeBuild/
+**/.cxx/
+
+# Generated packages and release artifacts
+*.apk
+*.aab
+*.apks
+*.xapk
+*.zip
+*.log
+captures/
+
+# Local reverse-engineering material and extracted reference APKs
+base.apk
+base-reverse/
+reference-apk/
+reverse-work/
+
+# Local agent / desktop metadata
+.agents/
+.codex/
+.DS_Store
+Thumbs.db

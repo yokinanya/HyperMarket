@@ -1,0 +1,46 @@
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "org.jetbrains.kotlin.plugin.compose"
+
+android {
+    namespace "com.hyper.market"
+    compileSdk 37
+
+    defaultConfig {
+        applicationId "com.hyper.market"
+        minSdk 26
+        targetSdk 37
+        versionCode 1
+        versionName "4.120.1-rebuilt"
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".rebuilt"
+            versionNameSuffix "-debug"
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        compose true
+    }
+}
+
+dependencies {
+    implementation "androidx.core:core:1.18.0"
+    implementation "androidx.activity:activity:1.12.4"
+    implementation "androidx.activity:activity-compose:1.12.4"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
+    implementation "org.jetbrains.compose.material3:material3:1.9.0"
+    implementation "top.yukonga.miuix.kmp:miuix-ui:0.9.3"
+    implementation "top.yukonga.miuix.kmp:miuix-icons:0.9.3"
+}
