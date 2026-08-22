@@ -15,8 +15,7 @@ public final class DownloadTaskStore {
     private static final String[] BOOLEAN_KEYS = {
             "showSystemApps", "incrementalUpdates", "removeSearchAds", "removeQuickApps",
             "removeReservationApps", "showPromotions", "showComments", "showSameDeveloper",
-            "optimizeNames", "xiaomiIslandOptimization", "noUserAction", "saveToDownloads",
-            "deleteAfterInstall"
+            "optimizeNames", "xiaomiIslandOptimization", "noUserAction", "saveToDownloads"
     };
 
     private DownloadTaskStore() { }

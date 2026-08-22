@@ -1,13 +1,14 @@
 package com.hyper.market
 
 import android.graphics.drawable.Drawable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -18,9 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -28,19 +29,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import androidx.compose.animation.Crossfade
+import coil3.compose.AsyncImagePainter
+import coil3.compose.rememberAsyncImagePainter
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 
 internal val PageBackground = Color(0xFFF7F7F7)
 internal val MutedBlue = Color(0xFF8795B7)
@@ -49,17 +53,22 @@ internal val CardWhite = Color.White
 
 @Composable
 internal fun ActionPill(label: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(28.dp))
-            .background(AccentBlue)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 7.dp),
-        contentAlignment = Alignment.Center,
+    ActionPill(label, primary = true, onClick = onClick)
+}
+
+@Composable
+internal fun ActionPill(label: String, primary: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        cornerRadius = ACTION_PILL_RADIUS,
+        minWidth = 0.dp,
+        minHeight = ACTION_PILL_HEIGHT,
+        colors = if (primary) ButtonDefaults.buttonColorsPrimary() else ButtonDefaults.buttonColors(),
+        insideMargin = PaddingValues(horizontal = 16.dp, vertical = 7.dp),
     ) {
         Text(
             label,
-            color = Color.White,
+            color = if (primary) Color.White else Color(0xFF333333),
             style = TextStyle(
                 fontSize = 14.sp,
                 lineHeight = 16.sp,
@@ -69,6 +78,9 @@ internal fun ActionPill(label: String, onClick: () -> Unit) {
         )
     }
 }
+
+private val ACTION_PILL_RADIUS = 28.dp
+private val ACTION_PILL_HEIGHT = 32.dp
 
 @Composable
 internal fun PageColumn(content: @Composable () -> Unit) {
@@ -143,27 +155,36 @@ internal fun RemoteImage(
     alignment: Alignment = Alignment.Center,
 ) {
     val context = LocalContext.current
-    val loader = remember(context) { RemoteImageLoader(context.applicationContext) }
     var retryToken by remember(url) { mutableIntStateOf(0) }
-    val result by produceState(
-        initialValue = BitmapLoadResult.loading(),
-        key1 = url,
-        key2 = retryToken,
-    ) {
-        value = withContext(Dispatchers.IO) { loader.load(url) }
+    val request = remember(url, retryToken) {
+        ImageRequest.Builder(context)
+            .data(url)
+            .crossfade(REMOTE_IMAGE_CROSSFADE_MS)
+            .build()
     }
-    Crossfade(targetState = result.bitmap, label = "remote-image") { bitmap ->
-        if (bitmap == null) {
-            IconStatusTile(result.status, modifier) { retryToken++ }
-        } else {
+    val painter = rememberAsyncImagePainter(
+        model = request,
+    )
+    val state by painter.state.collectAsState()
+    when (val currentState = state) {
+        AsyncImagePainter.State.Empty,
+        is AsyncImagePainter.State.Loading,
+        -> IconStatusTile("加载中", modifier)
+
+        is AsyncImagePainter.State.Error -> {
+            val message = currentState.result.throwable.message ?: "图片下载失败"
+            IconStatusTile("加载失败：$message", modifier) { retryToken++ }
+        }
+
+        is AsyncImagePainter.State.Success -> {
             val imageModifier = if (onLongClick == null) {
                 modifier
             } else {
                 modifier.combinedClickable(onClick = {}, onLongClick = onLongClick)
             }
             Image(
-                bitmap.asImageBitmap(),
-                contentDescription,
+                painter = painter,
+                contentDescription = contentDescription,
                 alignment = alignment,
                 contentScale = contentScale,
                 modifier = imageModifier,
@@ -171,6 +192,8 @@ internal fun RemoteImage(
         }
     }
 }
+
+private const val REMOTE_IMAGE_CROSSFADE_MS = 180
 
 @Composable
 private fun IconStatusTile(
@@ -188,6 +211,8 @@ private fun IconStatusTile(
             status,
             color = Color(0xFF68717D),
             fontSize = 12.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

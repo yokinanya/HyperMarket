@@ -54,8 +54,9 @@ public final class ApkInstaller {
         params.setSize(files.stream().mapToLong(File::length).sum());
         params.setInstallReason(PackageManager.INSTALL_REASON_USER);
         if (Build.VERSION.SDK_INT >= 31 && options.isNoUserAction()) {
-            params.setRequireUserAction(2);
-            params.setInstallScenario(1);
+            params.setRequireUserAction(
+                    PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
+            params.setInstallScenario(PackageManager.INSTALL_SCENARIO_FAST);
         }
         int sessionId = installer.createSession(params);
         writeSession(installer, sessionId, files, artifacts);
@@ -98,7 +99,6 @@ public final class ApkInstaller {
                 .putExtra(InstallResultReceiver.EXTRA_ICON_URL, options.getIconUrl())
                 .putExtra(InstallResultReceiver.EXTRA_FIRST_INSTALL, options.isFirstInstall())
                 .putExtra(InstallResultReceiver.EXTRA_SAVE_TO_DOWNLOADS, options.isSaveToDownloads())
-                .putExtra(InstallResultReceiver.EXTRA_DELETE_AFTER_INSTALL, options.isDeleteAfterInstall())
                 .putStringArrayListExtra(InstallResultReceiver.EXTRA_FILES, paths(files))
                 .putStringArrayListExtra(InstallResultReceiver.EXTRA_ARTIFACT_NAMES, artifactNames(artifacts));
         PendingIntent pending = PendingIntent.getBroadcast(context, sessionId, intent,

@@ -10,6 +10,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 final class XiaomiDetailExtrasParser {
     private XiaomiDetailExtrasParser() { }
@@ -182,7 +183,7 @@ final class XiaomiDetailExtrasParser {
     }
 
     private static String upgradeMarketImage(String value) {
-        String host = value.substring(7).split("/", 2)[0].toLowerCase();
+        String host = value.substring(7).split("/", 2)[0].toLowerCase(Locale.ROOT);
         if (host.equals("market.xiaomi.com") || host.endsWith(".market.xiaomi.com")) {
             return "https://" + value.substring(7);
         }

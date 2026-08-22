@@ -8,6 +8,8 @@ import android.os.Build;
 import android.os.Environment;
 import android.provider.MediaStore;
 
+import androidx.annotation.RequiresApi;
+
 import com.hyper.market.model.ApkArtifact;
 import com.hyper.market.model.MarketAppInfo;
 
@@ -44,6 +46,7 @@ public final class DownloadArchive {
         return saveLegacy(context, directory, name, source);
     }
 
+    @RequiresApi(29)
     private static SavedLocation saveMediaStore(Context context, String directory, String name,
                                                 File source) throws IOException {
         ContentResolver resolver = context.getContentResolver();

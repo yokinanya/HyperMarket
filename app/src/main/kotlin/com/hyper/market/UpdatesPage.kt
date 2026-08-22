@@ -1,6 +1,5 @@
 package com.hyper.market
 
-import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,8 +25,6 @@ import androidx.compose.ui.unit.sp
 import com.hyper.market.api.XiaomiApiClient
 import com.hyper.market.model.MarketAppInfo
 import com.hyper.market.model.UpdateInfo
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card
 
 private sealed interface UpdatesState {
@@ -49,10 +46,20 @@ fun UpdatesPage(
     val context = androidx.compose.ui.platform.LocalContext.current
     var refreshKey by remember { mutableIntStateOf(0) }
     var state by remember { mutableStateOf<UpdatesState>(UpdatesState.Loading) }
-    LaunchedEffect(refreshKey, settings.showSystemApps, packageVisibilityRefresh) {
+    LaunchedEffect(
+        refreshKey,
+        settings.showSystemApps,
+        settings.removeSearchAds,
+        settings.removeQuickApps,
+        settings.removeReservationApps,
+        settings.incrementalUpdates,
+        packageVisibilityRefresh,
+    ) {
         state = UpdatesState.Loading
         state = try {
-            UpdatesState.Loaded(loadUpdates(context, apiClient, updateStore, settings.showSystemApps))
+            UpdatesState.Loaded(
+                loadVisibleUpdates(context, apiClient, updateStore, settings),
+            )
         } catch (exception: Exception) {
             UpdatesState.Failed(exception.message ?: "更新检查失败")
         }
@@ -73,18 +80,6 @@ fun UpdatesPage(
             onRefresh = { refreshKey++ },
         )
     }
-}
-
-private suspend fun loadUpdates(
-    context: Context,
-    apiClient: XiaomiApiClient,
-    updateStore: UpdateStore,
-    showSystemApps: Boolean,
-): List<UpdateInfo> = withContext(Dispatchers.IO) {
-    val installedPackages = PackageInventory().scan(context)
-    val updates = apiClient.loadUpdates(installedPackages)
-    val visible = if (showSystemApps) updates else updates.filterNot { it.installedPackage.isSystemApp }
-    visible.filterNot(updateStore::isIgnored)
 }
 
 @Composable
@@ -170,7 +165,13 @@ private fun UpdatesError(message: String, onRetry: () -> Unit) {
 }
 
 internal fun formatTotalSize(updates: List<UpdateInfo>): String =
-    formatBytes(updates.sumOf { it.app.apkSize })
+    formatBytes(updates.sumOf { update ->
+        if (update.diffSize > 0 && update.diffSize < update.app.apkSize) {
+            update.diffSize
+        } else {
+            update.app.apkSize
+        }
+    })
 
 internal fun formatBytes(bytes: Long): String {
     if (bytes <= 0) return "大小未知"

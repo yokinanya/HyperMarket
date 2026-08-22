@@ -5,6 +5,7 @@ import com.hyper.market.model.DownloadMetadata;
 import com.hyper.market.model.InstalledPackageInfo;
 import com.hyper.market.model.MarketAppDetails;
 import com.hyper.market.model.MarketAppInfo;
+import com.hyper.market.model.SearchFeedPage;
 import com.hyper.market.model.TodayArticle;
 import com.hyper.market.model.TodayFeedPage;
 import com.hyper.market.model.TodayFeaturedItem;
@@ -12,27 +13,28 @@ import com.hyper.market.model.UpdateInfo;
 
 import android.os.Build;
 import android.content.Context;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.provider.Settings;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -49,17 +51,31 @@ public final class XiaomiApiClient {
     private static final String DOWNLOAD_API = "https://fgb0.market.xiaomi.com/download/";
     private static final String THUMBNAIL_BASE_URL =
             "https://sf0.market.xiaomi.com/thumbnail/";
-    private static final int CONNECT_TIMEOUT_MS = 15_000;
-    private static final int READ_TIMEOUT_MS = 30_000;
     private static final int GOLD_MI_PAGE_SIZE = 9;
     private static final String TAG = "XiaomiApi";
-    private static final String USER_AGENT =
-        "Dalvik/2.1.0 (Linux; U; Android 16; 25128PNA1C Build/BP2A.250605.031.A3)";
-    private static final String INSTANCE_ID = UUID.randomUUID().toString();
+    private static final String MARKET_PACKAGE = "com.xiaomi.market";
+    private static final String MARKET_VERSION_NAME = "4.120.1";
+    private static final String MARKET_VERSION_CODE = "40007441";
+    private static final String MARKET_QUERY_VERSION = "40008341";
+    private static final String PAGE_CONFIG_VERSION = "18411801";
+    private static final String WEB_RES_VERSION = "3211";
+    private static final String DEFAULT_EXPERIMENT_IDS =
+            "2023001,2311551,2398789,2398846,2346056,2075312,2362289,2378691,"
+                    + "2403435,2263575,2404589,2333160,2286434,1411227,1978999,"
+                    + "2368587,2362073,2059056";
+    private static final String DEFAULT_XMSF_VERSION = "70005022";
+    private static final long OPEN_ENDED_APP_VERSION = 2_147_483_647L;
+    private static final String QUICK_GAME_TYPE = "quickGame";
+    private static final String INSTANCE_ID_KEY = "market_instance_id";
+    private static final String SETTINGS_FILE = "market_settings";
     private static final Pattern IMAGE_SOURCE_PATTERN = Pattern.compile(
             "(?i)<img\\b[^>]*(?:src|data-src)=[\\\"']([^\\\"']+)[\\\"'][^>]*>");
     private volatile java.util.Map<String, String> profileOverrides = Collections.emptyMap();
     private final Context context;
+    private final String instanceId;
+    private final XiaomiDeviceIdentity deviceIdentity;
+    private final Object identityBootstrapLock = new Object();
+    private final Map<String, String> oldApkHashCache = new ConcurrentHashMap<>();
 
     public XiaomiApiClient() {
         this(null);
@@ -67,6 +83,8 @@ public final class XiaomiApiClient {
 
     public XiaomiApiClient(Context context) {
         this.context = context == null ? null : context.getApplicationContext();
+        this.instanceId = loadInstanceId(this.context);
+        this.deviceIdentity = this.context == null ? null : new XiaomiDeviceIdentity(this.context);
     }
 
     public void setProfileOverrides(java.util.Map<String, String> overrides) {
@@ -75,35 +93,96 @@ public final class XiaomiApiClient {
 
     public void setProfile(String source, java.util.Map<String, String> overrides) {
         if ("preset".equals(source)) {
-            profileOverrides = Collections.unmodifiableMap(presetProfile());
+            profileOverrides = Collections.emptyMap();
+            return;
+        }
+        if ("device".equals(source)) {
+            profileOverrides = Collections.emptyMap();
             return;
         }
         profileOverrides = Collections.unmodifiableMap(new LinkedHashMap<>(overrides));
     }
 
-    public List<MarketAppInfo> search(String keyword, int page) throws IOException {
+    public SearchFeedPage search(String keyword, int page) throws IOException {
+        if (page == 0) ensureServerIdentity();
         LinkedHashMap<String, String> parameters = searchParameters(keyword, page);
-        String url = XiaomiApiSigner.signedGet(MARKET_API + "search?", parameters);
+        Log.i(TAG, "search request keyword=" + keyword
+                + " page=" + page
+                + " marketVersion=" + parameters.get("marketVersion")
+                + " installDay=" + parameters.get("installDay")
+                + " instance=" + parameters.get("instance_id")
+                + " keyCount=" + parameters.size());
+        String url = signedGet(MARKET_API + "search?", parameters);
         JSONObject response = getJson(url);
-        return parseApps(findList(response));
+        throwIfSearchRejected(response);
+        JSONArray list = findSearchList(response);
+        List<MarketAppInfo> apps = list == null
+                ? Collections.emptyList() : parseSearchApps(list);
+        boolean hasMore = response.optBoolean("hasMore", !apps.isEmpty());
+        Log.i(TAG, "search keyword=" + keyword
+                + " page=" + page
+                + " code=" + response.optString("code", "")
+                + " message=" + response.optString("message", "")
+                + " apps=" + apps.size()
+                + " hasMore=" + hasMore
+                + " marketVersion=" + parameters.get("marketVersion")
+                + " dctx=" + parameters.containsKey("dctx"));
+        return new SearchFeedPage(apps, hasMore);
+    }
+
+    private void throwIfSearchRejected(JSONObject response) throws IOException {
+        String code = response.optString("code", "");
+        String message = response.optString("message", "");
+        if ("-1".equals(code) && !isBlank(message)) {
+            Log.w(TAG, "search rejected code=" + code + " message=" + message);
+            throw new IOException("Xiaomi API search rejected: " + message);
+        }
+    }
+
+    private void ensureServerIdentity() throws IOException {
+        if (deviceIdentity == null || !isBlank(deviceIdentity.read().dctx)) return;
+        synchronized (identityBootstrapLock) {
+            if (!isBlank(deviceIdentity.read().dctx)) return;
+            JSONObject response = loadServerIdentity();
+            String dctx = response.optString("dctx", "");
+            String experimentIds = response.optString("exp_id", "");
+            if (isBlank(experimentIds)) experimentIds = response.optString("expId", "");
+            if (isBlank(dctx)) {
+                throw new IOException("Xiaomi API expId response has no dctx: "
+                        + response.optString("message", "unknown response"));
+            }
+            deviceIdentity.storeServerIdentity(dctx, experimentIds);
+            Log.i(TAG, "server identity initialized, expIds=" + !isBlank(experimentIds));
+        }
+    }
+
+    private JSONObject loadServerIdentity() throws IOException {
+        LinkedHashMap<String, String> parameters = baseParameters();
+        removeOfficialOnlyParameters(parameters);
+        XiaomiDeviceIdentity.Identity identity = deviceIdentity.read();
+        parameters.put("xmsfVersion", nonBlank(identity.xmsfVersion, DEFAULT_XMSF_VERSION));
+        String url = signedGet(MARKET_API + "expId?", parameters);
+        return getJson(url);
     }
 
     public List<UpdateInfo> loadUpdates(List<InstalledPackageInfo> installedPackages)
             throws IOException {
         if (installedPackages.isEmpty()) {
-            return List.of();
+            return Collections.emptyList();
         }
         LinkedHashMap<String, InstalledPackageInfo> installedByPackage = new LinkedHashMap<>();
         for (InstalledPackageInfo installed : installedPackages) {
             installedByPackage.put(installed.getPackageName(), installed);
         }
         LinkedHashMap<String, String> parameters = baseParameters();
+        parameters.remove("tzNonce");
+        parameters.remove("tzSign");
         parameters.put("apkSource", joinInstalled(installedPackages, InstalledPackageInfo::getApkSource));
         parameters.put("autoUpdateEnabled", "false");
         parameters.put("background", "false");
         parameters.put("invalidSystemPackageHash", "null");
         parameters.put("showUnfitnessApp", "true");
-        parameters.put("session_id", INSTANCE_ID + System.currentTimeMillis());
+        parameters.put("session_id", instanceId + System.currentTimeMillis());
         parameters.put("splits", joinInstalled(installedPackages, InstalledPackageInfo::getSplits));
         parameters.put("packageName", joinInstalled(installedPackages, InstalledPackageInfo::getPackageName));
         parameters.put("versionCode", joinInstalled(installedPackages, item ->
@@ -112,10 +191,95 @@ public final class XiaomiApiClient {
         parameters.put("installedByMarket", joinInstalled(
                 installedPackages, InstalledPackageInfo::getInstalledByMarket));
         parameters.put("ref", "update");
-        XiaomiApiSigner.SignedPostRequest request =
-                XiaomiApiSigner.signedPost(UPDATE_API, parameters);
+        XiaomiApiSigner.SignedPostRequest request = signedPost(UPDATE_API, parameters);
         JSONObject response = postJson(request.getUrl(), request.getParameters());
-        return parseUpdates(response, installedByPackage);
+        List<UpdateInfo> updates = parseUpdates(response, installedByPackage);
+        return withDiffSizes(updates);
+    }
+
+    private List<UpdateInfo> withDiffSizes(List<UpdateInfo> updates) {
+        if (updates.isEmpty()) return updates;
+        try {
+            Map<String, Long> diffSizes = loadDiffSizes(updates);
+            List<UpdateInfo> enriched = new ArrayList<>(updates.size());
+            for (UpdateInfo update : updates) {
+                long diffSize = diffSizes.getOrDefault(update.getApp().getPackageName(), 0L);
+                enriched.add(diffSize > 0
+                        ? new UpdateInfo(update.getApp(), update.getInstalledPackage(), diffSize)
+                        : update);
+            }
+            return enriched;
+        } catch (IOException exception) {
+            Log.i(TAG, "diffsize unavailable: " + exception.getMessage());
+            return updates;
+        }
+    }
+
+    private Map<String, Long> loadDiffSizes(List<UpdateInfo> updates) throws IOException {
+        LinkedHashMap<String, String> parameters = baseParameters();
+        parameters.remove("tzNonce");
+        parameters.remove("tzSign");
+        parameters.put("session_id", instanceId + System.currentTimeMillis());
+        parameters.put("packageName", joinUpdates(updates, item -> item.getApp().getPackageName()));
+        parameters.put("versionCode", joinUpdates(updates,
+                item -> String.valueOf(item.getInstalledPackage().getVersionCode())));
+        parameters.put("oldApkHash", joinUpdates(updates,
+                item -> oldApkHash(item.getInstalledPackage().getPackageName())));
+        XiaomiApiSigner.SignedPostRequest request = signedPost(
+                "https://updateinfo.market.xiaomi.com/apm/updateinfo/diffsize?lo=CN", parameters);
+        return parseDiffSizes(postJson(request.getUrl(), request.getParameters()));
+    }
+
+    private Map<String, Long> parseDiffSizes(JSONObject response) {
+        JSONArray values = response.optJSONArray("apkDiffInfoList");
+        JSONObject data = response.optJSONObject("data");
+        if (values == null && data != null) values = data.optJSONArray("apkDiffInfoList");
+        Map<String, Long> result = new LinkedHashMap<>();
+        if (values == null) return result;
+        for (int index = 0; index < values.length(); index++) {
+            JSONObject item = values.optJSONObject(index);
+            if (item == null) continue;
+            String packageName = item.optString("packageName", "");
+            long size = item.optLong("diffFileSize", 0L);
+            if (!isBlank(packageName) && size > 0) result.put(packageName, size);
+        }
+        return result;
+    }
+
+    private String joinUpdates(
+            List<UpdateInfo> updates, Function<UpdateInfo, String> selector) {
+        List<String> values = new ArrayList<>(updates.size());
+        for (UpdateInfo update : updates) values.add(selector.apply(update));
+        return String.join(",", values);
+    }
+
+    private String oldApkHash(String packageName) {
+        if (context == null) return "0";
+        try {
+            String path = context.getPackageManager().getApplicationInfo(packageName, 0).sourceDir;
+            java.io.File file = new java.io.File(path);
+            String cacheKey = packageName + ":" + file.lastModified() + ":" + file.length();
+            String cached = oldApkHashCache.get(cacheKey);
+            if (!isBlank(cached)) return cached;
+            try (FileInputStream input = new FileInputStream(path)) {
+                MessageDigest digest = MessageDigest.getInstance("MD5");
+                byte[] buffer = new byte[8_192];
+                int count;
+                while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+                String hash = hexDigest(digest.digest());
+                oldApkHashCache.put(cacheKey, hash);
+                return hash;
+            }
+        } catch (IOException | PackageManager.NameNotFoundException |
+                 java.security.NoSuchAlgorithmException exception) {
+            return "0";
+        }
+    }
+
+    private String hexDigest(byte[] bytes) {
+        StringBuilder result = new StringBuilder(bytes.length * 2);
+        for (byte value : bytes) result.append(String.format(Locale.ROOT, "%02x", value));
+        return result.toString();
     }
 
     public List<UpdateInfo> loadManualUpdate(String packageName, long versionCode)
@@ -159,7 +323,7 @@ public final class XiaomiApiClient {
     private TodayFeedPage loadTodayFeed(int page) throws IOException {
         LinkedHashMap<String, String> parameters = todayParameters();
         parameters.put("page", String.valueOf(page));
-        String url = XiaomiApiSigner.signedGet(MARKET_API + "today?", parameters);
+        String url = signedGet(MARKET_API + "today?", parameters);
         return parseTodayFeed(getJson(url));
     }
 
@@ -169,7 +333,7 @@ public final class XiaomiApiClient {
         parameters.put("pageSize", String.valueOf(GOLD_MI_PAGE_SIZE));
         parameters.put("ref", "goldmi");
         parameters.put("previousFromRef", "goldmi");
-        String url = XiaomiApiSigner.signedGet(MARKET_API + "zone/goldMiV2?", parameters);
+        String url = signedGet(MARKET_API + "zone/goldMiV2?", parameters);
         return parseGoldMiFeed(getJson(url));
     }
 
@@ -201,7 +365,7 @@ public final class XiaomiApiClient {
         parameters.put("sourcePackage", "com.xiaomi.market");
         parameters.put("previousFromRef", "today");
         parameters.put("rId", resourceId);
-        String url = XiaomiApiSigner.signedGet(MARKET_API + "topic/detail?", parameters);
+        String url = signedGet(MARKET_API + "topic/detail?", parameters);
         return parseTodayArticle(resourceId, getJson(url));
     }
 
@@ -209,7 +373,7 @@ public final class XiaomiApiClient {
         IOException lastFailure = null;
         for (String query : packageQueries(packageName)) {
             try {
-                MarketAppInfo match = search(query, 1).stream()
+                MarketAppInfo match = search(query, 0).getApps().stream()
                         .filter(app -> packageName.equals(app.getPackageName()))
                         .findFirst()
                         .orElse(null);
@@ -228,12 +392,43 @@ public final class XiaomiApiClient {
 
     public MarketAppDetails loadDetail(MarketAppInfo app) throws IOException {
         LinkedHashMap<String, String> parameters = baseParameters();
+        parameters.put("bottomTab", "true");
+        parameters.put("feReload", "false");
+        parameters.put("isNewUI", "true");
+        parameters.put("minacompatible", "1");
+        parameters.put("native", "1");
+        parameters.put("entrance", "detail");
         parameters.put("appId", String.valueOf(app.getAppId()));
+        parameters.put("bundleType", "main");
+        parameters.put("pageRef", "com.miui.home");
+        parameters.put("originalPageRef", "com.miui.home");
         parameters.put("packageName", app.getPackageName());
+        parameters.put("sourcePackage", MARKET_PACKAGE);
+        parameters.put("senderPackageName", MARKET_PACKAGE);
+        parameters.put("callerPackage", MARKET_PACKAGE);
+        parameters.put("callerSignature", "88daa889de21a80bca64464243c9ede6");
         parameters.put("ref", "detail");
         parameters.put("pageTag", "detail");
-        parameters.put("callerPackage", "com.xiaomi.market");
-        String url = XiaomiApiSigner.signedGet(
+        parameters.put("previousFromRef", "searchResult");
+        parameters.put("suggestV", "1");
+        parameters.put("supportSlide", "1");
+        parameters.put("pos", "detailInstallBtn");
+        parameters.put("sid", instanceId + "default");
+        parameters.put("oldVersionCode", "0");
+        parameters.put("releaseType", "0");
+        parameters.put("refs", app.getAppId() + "input-searchResult-detail/");
+        parameters.put("supportH5", "2");
+        parameters.put("supportBetaApp", "true");
+        parameters.put("supportGameLottery", "true");
+        parameters.put("supportCorpInternal", "true");
+        parameters.put("supportSmallApk", "true");
+        parameters.put("safeModeCheck", "false");
+        parameters.put("safeModeType", "0");
+        parameters.put("gameCenterVersionCode", "135100100");
+        parameters.put("minaPlatformVersion", "13170003");
+        parameters.put("voiceAssistVersion", "507513001");
+        parameters.put("personalAssistantVersion", "253081");
+        String url = signedGet(
                 MARKET_API + "app/tabs/basicInfo/" + app.getAppId() + "?", parameters);
         JSONObject response = getJson(url);
         return XiaomiDetailParser.parseDetails(response, parseApp(findObject(response)));
@@ -241,15 +436,54 @@ public final class XiaomiApiClient {
 
     public DownloadMetadata loadDownloadMetadata(MarketAppInfo app) throws IOException {
         LinkedHashMap<String, String> parameters = baseParameters();
+        PackageInfo installed = installedPackage(app.getPackageName());
+        parameters.put("ad", "0");
         parameters.put("appId", String.valueOf(app.getAppId()));
+        parameters.put("autoUpdateEnabled", "false");
+        parameters.put("bundleType", "main");
+        parameters.put("downloadGrantType", "0");
+        parameters.put("kcgsdk", "false");
+        parameters.put("lastUseTime", "0");
+        parameters.put("oldApkHash", "0");
         parameters.put("packageName", app.getPackageName());
         parameters.put("pName", app.getPackageName());
+        parameters.put("pageRef", "com.miui.home");
+        parameters.put("ref", installed == null ? "detail" : "upgrade");
+        parameters.put("refPosition", "0");
+        parameters.put("sourcePackage", "com.miui.home");
+        parameters.put("supportCloudProfile", "true");
+        parameters.put("supportCloudVerify", "true");
+        parameters.put("supportCompressType", "1");
         parameters.put("supportModifyUrl", "true");
         parameters.put("supportSdm", "true");
         parameters.put("supportSpeedInstall", "true");
-        String url = XiaomiApiSigner.signedGet(
-                MARKET_API + "download/" + app.getAppId() + "?", parameters);
+        parameters.put("taskStartTime", String.valueOf(System.currentTimeMillis()));
+        parameters.put("useCache", "false");
+        parameters.put("versionCode", String.valueOf(installedVersionCode(installed)));
+        parameters.put("versionName", installed == null || installed.versionName == null
+                ? "" : installed.versionName);
+        parameters.put("card_position", "0");
+        parameters.put("item_position", "0");
+        parameters.put("pre_rerank_card_position", "0");
+        parameters.put("pre_rerank_item_position", "0");
+        parameters.put("session_id", instanceId + System.currentTimeMillis());
+        parameters.put("previousFromRef", "detailInstallBtn");
+        String url = signedGet(MARKET_API + "download/" + app.getAppId() + "?", parameters);
         return parseDownload(app, getJson(url));
+    }
+
+    private PackageInfo installedPackage(String packageName) {
+        if (context == null) return null;
+        try {
+            return context.getPackageManager().getPackageInfo(packageName, 0);
+        } catch (PackageManager.NameNotFoundException exception) {
+            return null;
+        }
+    }
+
+    private long installedVersionCode(PackageInfo info) {
+        if (info == null) return 0;
+        return Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode;
     }
 
     private LinkedHashMap<String, String> baseParameters() {
@@ -257,11 +491,23 @@ public final class XiaomiApiClient {
         addClientParameters(parameters);
         addFeatureParameters(parameters);
         parameters.putAll(profileOverrides);
+        parameters.remove("buildId");
         return parameters;
     }
 
+    private String signedGet(String url, Map<String, String> parameters) {
+        return XiaomiApiSigner.signedGet(url, parameters);
+    }
+
+    private XiaomiApiSigner.SignedPostRequest signedPost(
+            String url, Map<String, String> parameters) {
+        return XiaomiApiSigner.signedPost(url, parameters);
+    }
+
     private void addClientParameters(LinkedHashMap<String, String> parameters) {
-        DisplayMetrics metrics = Resources.getSystem().getDisplayMetrics();
+        DisplayMetrics metrics = context == null
+                ? Resources.getSystem().getDisplayMetrics()
+                : context.getResources().getDisplayMetrics();
         String locale = Locale.getDefault().getLanguage();
         String country = Locale.getDefault().getCountry();
         String resolution = orderedResolution(metrics.widthPixels, metrics.heightPixels);
@@ -273,41 +519,65 @@ public final class XiaomiApiClient {
         String miuiName = nonBlank(systemProperty("ro.miui.ui.version.name"), "V816");
         String device = nonBlank(Build.DEVICE, "haotian");
         String model = nonBlank(Build.MODEL, "2410DPN6CC");
-        String buildId = nonBlank(Build.ID, "BP2A.250605.031.A3");
         String region = nonBlank(systemProperty("ro.miui.region"), "CN");
-        parameters.put("activedTimeInterval", "1");
+        XiaomiDeviceIdentity.Identity identity = deviceIdentity == null
+                ? null : deviceIdentity.read();
+        parameters.put("activedTimeInterval", identity == null
+                ? "1" : identity.activeTimeInterval);
         parameters.put("co", nonBlank(country, "CN"));
         parameters.put("cpuArchitecture", supportedArchitectures());
         parameters.put("device", device);
         parameters.put("deviceType", "0");
-        parameters.put("installDay", "1");
-        parameters.put("instance_id", INSTANCE_ID);
+        parameters.put("installDay", identity == null ? "1" : identity.installDay);
+        parameters.put("instance_id", instanceId);
         parameters.put("la", locale.isEmpty() ? "zh" : locale);
-        parameters.put("launchDay", "1");
+        parameters.put("launchDay", identity == null ? "1" : identity.installDay);
         parameters.put("lo", region);
-        parameters.put("marketVersion", "40008341");
+        parameters.put("marketVersion", MARKET_QUERY_VERSION);
         parameters.put("miuiBigVersionCode", miuiCode);
         parameters.put("miuiBigVersionName", miuiName);
         parameters.put("model", model);
         parameters.put("network", "unknown");
         parameters.put("newUser", "false");
-        parameters.put("os", nonBlank(Build.VERSION.INCREMENTAL, osIncremental));
-        parameters.put("osV2", osIncremental);
+        parameters.put("os", nonBlank(osIncremental, Build.VERSION.RELEASE));
+        parameters.put("osV2", nonBlank(osIncremental, Build.VERSION.RELEASE));
         parameters.put("osBigVersionCode", miOsCode);
         parameters.put("osBigVersionName", miOsName);
         parameters.put("androidVersion", Build.VERSION.RELEASE);
-        parameters.put("pageConfigVersion", "18432101");
+        parameters.put("customization", nonBlank(
+                systemProperty("ro.miui.customized.region"), ""));
+        parameters.put("pageConfigVersion", PAGE_CONFIG_VERSION);
         parameters.put("resolution", resolution);
         parameters.put("densityDpi", String.valueOf(metrics.densityDpi));
         parameters.put("densityScaleFactor", String.valueOf(metrics.density));
-        parameters.put("hybridFrameworkVersion", "13170201");
-        parameters.put("buildId", buildId);
+        parameters.put("hybridFrameworkVersion", hybridFrameworkVersion());
+        parameters.put("minaPlatformVersion", hybridFrameworkVersion());
+        parameters.put("recentSearchKey", "");
+        parameters.put("gameCenterVersionCode", packageVersionCode("com.xiaomi.gamecenter"));
         parameters.put("supportedIslandVersion", supportedIslandVersion());
         parameters.put("hasGMSCore", hasGmsCore());
         parameters.put("ro", "unknown");
         parameters.put("sdk", String.valueOf(Build.VERSION.SDK_INT));
-        parameters.put("webResVersion", "3193");
-        parameters.put("oaId", "6f24320b1e9596bf");
+        parameters.put("webResVersion", WEB_RES_VERSION);
+        parameters.put("oaId", oaId());
+        if (identity != null && !isBlank(identity.dctx)) {
+            parameters.put("dctx", identity.dctx);
+        }
+        if (identity != null && !isBlank(identity.tzNonce) && !isBlank(identity.tzSign)) {
+            parameters.put("tzNonce", identity.tzNonce);
+            parameters.put("tzSign", identity.tzSign);
+        }
+    }
+
+    private String packageVersionCode(String packageName) {
+        if (context == null) return "0";
+        try {
+            PackageInfo info = context.getPackageManager().getPackageInfo(packageName, 0);
+            return Build.VERSION.SDK_INT >= 28
+                    ? String.valueOf(info.getLongVersionCode()) : String.valueOf(info.versionCode);
+        } catch (PackageManager.NameNotFoundException exception) {
+            return "0";
+        }
     }
 
     private String orderedResolution(int width, int height) {
@@ -323,11 +593,63 @@ public final class XiaomiApiClient {
         if (context == null) return "1";
         String protocol = Settings.System.getString(
                 context.getContentResolver(), "notification_focus_protocol");
-        return protocol == null || protocol.isBlank() ? "1" : protocol;
+        return "2".equals(protocol) || "3".equals(protocol) ? protocol : "1";
     }
 
     private String hasGmsCore() {
         return String.valueOf("1".equals(systemProperty("ro.miui.has_gmscore")));
+    }
+
+    private String hybridFrameworkVersion() {
+        if (context == null) {
+            return "";
+        }
+        try {
+            PackageInfo packageInfo = context.getPackageManager().getPackageInfo("com.miui.hybrid", 0);
+            return Build.VERSION.SDK_INT >= 28
+                    ? String.valueOf(packageInfo.getLongVersionCode())
+                    : String.valueOf(packageInfo.versionCode);
+        } catch (Exception exception) {
+            return "";
+        }
+    }
+
+    private String oaId() {
+        String reflected = reflectedOaId();
+        if (!isBlank(reflected)) {
+            return reflected;
+        }
+        return "6f24320b1e9596bf";
+    }
+
+    private String reflectedOaId() {
+        if (context == null) {
+            return "";
+        }
+        try {
+            Class<?> providerClass = Class.forName("com.android.id.impl.IdProviderImpl");
+            Object provider = providerClass.getDeclaredConstructor().newInstance();
+            Method method = providerClass.getMethod("getOAID", Context.class);
+            Object result = method.invoke(provider, context);
+            return result instanceof String ? (String) result : "";
+        } catch (ReflectiveOperationException exception) {
+            return "";
+        }
+    }
+
+    private String loadInstanceId(Context appContext) {
+        if (appContext == null) {
+            return UUID.randomUUID().toString();
+        }
+        android.content.SharedPreferences preferences = appContext.getSharedPreferences(
+                SETTINGS_FILE, Context.MODE_PRIVATE);
+        String stored = preferences.getString(INSTANCE_ID_KEY, "");
+        if (!isBlank(stored)) {
+            return stored;
+        }
+        String generated = UUID.randomUUID().toString();
+        preferences.edit().putString(INSTANCE_ID_KEY, generated).apply();
+        return generated;
     }
 
     private String systemProperty(String key) {
@@ -341,7 +663,11 @@ public final class XiaomiApiClient {
     }
 
     private String nonBlank(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value;
+        return isBlank(value) ? fallback : value;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private void addFeatureParameters(LinkedHashMap<String, String> parameters) {
@@ -369,40 +695,14 @@ public final class XiaomiApiClient {
         parameters.put("supportOperateIcon", "true");
         parameters.put("supportPatchVer", "0,1,2,3");
         parameters.put("supportSmallApk", "true");
-        parameters.put("useExpId", "2023001,2311551,2398789,2398846,2346056,2075312,2362289,2378691,2403435,2263575,2404589,2333160,2286434,1411227,1978999,2368587,2059056");
-    }
-
-    private LinkedHashMap<String, String> presetProfile() {
-        LinkedHashMap<String, String> profile = new LinkedHashMap<>();
-        profile.put("co", "CN");
-        profile.put("la", "zh");
-        profile.put("lo", "CN");
-        profile.put("cpuArchitecture", "arm64-v8a");
-        profile.put("device", "popsicle");
-        profile.put("model", "2509FPN0BC");
-        profile.put("os", "OS3.0.315.0.WPBCNXM");
-        profile.put("osV2", "OS3.0.315.0.WPBCNXM");
-        profile.put("androidVersion", "15");
-        profile.put("sdk", "35");
-        profile.put("resolution", "1080*2400");
-        profile.put("densityDpi", "420");
-        profile.put("densityScaleFactor", "2.625");
-        profile.put("miuiBigVersionCode", "816");
-        profile.put("miuiBigVersionName", "V816");
-        profile.put("osBigVersionCode", "3");
-        profile.put("osBigVersionName", "OS3.0");
-        profile.put("marketVersion", "40008341");
-        profile.put("pageConfigVersion", "18411801");
-        profile.put("webResVersion", "3211");
-        profile.put("hybridFrameworkVersion", "13180003");
-        profile.put("buildId", "BP2A.250605.031.A3");
-        profile.put("hasGMSCore", "true");
-        profile.put("supportedIslandVersion", "3");
-        return profile;
+        parameters.put("useExpId", deviceIdentity == null
+                ? DEFAULT_EXPERIMENT_IDS
+                : deviceIdentity.readExperimentIds(DEFAULT_EXPERIMENT_IDS));
     }
 
     private LinkedHashMap<String, String> searchParameters(String keyword, int page) {
         LinkedHashMap<String, String> parameters = baseParameters();
+        removeOfficialOnlyParameters(parameters);
         parameters.put("bottomTab", "true");
         parameters.put("flag", "2");
         parameters.put("feReload", "false");
@@ -412,6 +712,7 @@ public final class XiaomiApiClient {
         parameters.put("searchFrom", "input");
         parameters.put("minacompatible", "1");
         parameters.put("native", "1");
+        parameters.put("keyword", keyword);
         parameters.put("renderType", "1");
         parameters.put("pageRef", "com.miui.home");
         parameters.put("showGoogleAppsType", "2");
@@ -419,13 +720,20 @@ public final class XiaomiApiClient {
         parameters.put("supportSlide", "1");
         parameters.put("previousFromRef", "searchSuggest");
         parameters.put("voiceAssistVersion", "507513001");
+        parameters.put("suggestV", "1");
         parameters.put("isSupportCreative", "true");
         parameters.put("refs", "input-searchResult");
-        parameters.put("suggestV", "1");
-        parameters.put("keyword", keyword);
+        parameters.put("search_session", instanceId + System.currentTimeMillis());
         parameters.put("page", String.valueOf(page));
-        parameters.put("search_session", INSTANCE_ID + System.currentTimeMillis());
         return parameters;
+    }
+
+    private void removeOfficialOnlyParameters(Map<String, String> parameters) {
+        parameters.remove("customization");
+        parameters.remove("minaPlatformVersion");
+        parameters.remove("recentSearchKey");
+        parameters.remove("gameCenterVersionCode");
+        parameters.remove("session_id");
     }
 
     private TodayFeedPage parseTodayFeed(JSONObject response) throws IOException {
@@ -640,12 +948,15 @@ public final class XiaomiApiClient {
             if (block == null) {
                 continue;
             }
+            if (headerImage.isEmpty()) {
+                headerImage = articleBannerImage(block);
+            }
             parseArticleBlock(block, body, imageUrls, apps);
         }
         return new TodayArticle(
                 resourceId,
                 firstText(data, "title", "detailTitle", "outerTitle", "webViewTitle"),
-                normalizeImage(headerImage, "l720q90"),
+                normalizeImage(headerImage, "q90"),
                 body.toString(),
                 imageUrls,
                 uniqueApps(apps));
@@ -704,6 +1015,17 @@ public final class XiaomiApiClient {
         }
         appendAppList(block.optJSONArray("listApp"), apps);
         appendAppList(block.optJSONArray("appList"), apps);
+    }
+
+    private String articleBannerImage(JSONObject block) {
+        JSONObject bannerInfo = block.optJSONObject("bannerInfo");
+        String image = firstUsableImage(
+                bannerInfo, "banner", "mticon", "webViewPic", "imgUrl");
+        if (image.isEmpty()) {
+            image = firstUsableImage(
+                    block, "banner", "mticon", "webViewPic", "imgUrl");
+        }
+        return image;
     }
 
     private void appendAppList(JSONArray list, List<MarketAppInfo> apps) throws IOException {
@@ -801,84 +1123,64 @@ public final class XiaomiApiClient {
     }
 
     private JSONObject getJson(String url) throws IOException {
-        HttpURLConnection connection = open(url, "GET");
         try {
-            int status = connection.getResponseCode();
-            String body = readBody(status >= 400 ? connection.getErrorStream() : connection.getInputStream());
-            if (status < 200 || status >= 300) {
-                throw new IOException("Xiaomi API HTTP " + status + ": " + body);
-            }
-            return new JSONObject(body);
+            return new JSONObject(KtorMarketHttpClient.get(url, getHeaders()));
         } catch (JSONException exception) {
             throw new IOException("Xiaomi API returned invalid JSON", exception);
-        } finally {
-            connection.disconnect();
         }
     }
 
     private JSONObject postJson(String url, java.util.Map<String, String> parameters)
             throws IOException {
-        HttpURLConnection connection = open(url, "POST");
-        byte[] body = XiaomiApiSigner.formBody(parameters).getBytes(StandardCharsets.UTF_8);
-        connection.setDoOutput(true);
-        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-        connection.setFixedLengthStreamingMode(body.length);
-        try (java.io.OutputStream output = connection.getOutputStream()) {
-            output.write(body);
-        }
         try {
-            int status = connection.getResponseCode();
-            String responseBody = readBody(
-                    status >= 400 ? connection.getErrorStream() : connection.getInputStream());
-            if (status < 200 || status >= 300) {
-                throw new IOException("Xiaomi API HTTP " + status + ": " + responseBody);
-            }
-            return new JSONObject(responseBody);
+            return new JSONObject(KtorMarketHttpClient.postForm(
+                    url, parameters, postHeaders()));
         } catch (JSONException exception) {
             throw new IOException("Xiaomi API returned invalid JSON", exception);
-        } finally {
-            connection.disconnect();
         }
     }
 
-    private HttpURLConnection open(String url, String method) throws IOException {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setRequestMethod(method);
-        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        connection.setReadTimeout(READ_TIMEOUT_MS);
-        connection.setRequestProperty("User-Agent", USER_AGENT);
-        connection.setRequestProperty("x-version-name", "4.120.1");
-        connection.setRequestProperty("x-version-code", "40007441");
-        connection.setRequestProperty("Accept", "application/json");
-        return connection;
+    private java.util.Map<String, String> getHeaders() {
+        java.util.LinkedHashMap<String, String> headers = new java.util.LinkedHashMap<>();
+        LinkedHashMap<String, String> parameters = baseParameters();
+        headers.put("User-Agent", userAgent(parameters));
+        headers.put("x-version-name", MARKET_VERSION_NAME);
+        headers.put("x-version-code", MARKET_VERSION_CODE);
+        return headers;
     }
 
-    private String readBody(InputStream stream) throws IOException {
-        if (stream == null) {
-            return "";
-        }
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            StringBuilder result = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                result.append(line);
-            }
-            return result.toString();
-        }
+    private java.util.Map<String, String> postHeaders() {
+        java.util.LinkedHashMap<String, String> headers = new java.util.LinkedHashMap<>();
+        LinkedHashMap<String, String> parameters = baseParameters();
+        headers.put("User-Agent", userAgent(parameters));
+        return headers;
     }
 
-    private JSONArray findList(JSONObject response) throws IOException {
-        JSONObject data = response.optJSONObject("data");
+    public java.util.Map<String, String> downloadHeaders() {
+        java.util.LinkedHashMap<String, String> headers = new java.util.LinkedHashMap<>(getHeaders());
+        headers.put("x-pkg-name", MARKET_PACKAGE);
+        return java.util.Collections.unmodifiableMap(headers);
+    }
+
+    private String userAgent(LinkedHashMap<String, String> parameters) {
+        String androidVersion = parameters.get("androidVersion");
+        String model = parameters.get("model");
+        String buildId = profileOverrides.get("buildId");
+        if (isBlank(buildId)) {
+            buildId = nonBlank(systemProperty("ro.build.id"), Build.ID);
+        }
+        return "Dalvik/2.1.0 (Linux; U; Android " + androidVersion + "; "
+                + model + " Build/" + buildId + ")";
+    }
+
+    private JSONArray findSearchList(JSONObject response) {
         JSONArray list = response.optJSONArray("list");
+        JSONObject data = response.optJSONObject("data");
         if (list == null && data != null) {
             list = data.optJSONArray("listApp");
         }
         if (list == null && data != null) {
             list = data.optJSONArray("appList");
-        }
-        if (list == null) {
-            throw new IOException("Xiaomi API search response has no app list");
         }
         return list;
     }
@@ -898,13 +1200,18 @@ public final class XiaomiApiClient {
         return response;
     }
 
-    private List<MarketAppInfo> parseApps(JSONArray list) throws IOException {
+    private List<MarketAppInfo> parseSearchApps(JSONArray list) {
         List<MarketAppInfo> apps = new ArrayList<>();
+        Set<String> packages = new LinkedHashSet<>();
         for (int index = 0; index < list.length(); index++) {
-            try {
-                appendSearchApps(apps, list.getJSONObject(index));
-            } catch (JSONException exception) {
-                throw new IOException("Xiaomi API app item is invalid at index " + index, exception);
+            JSONObject item = list.optJSONObject(index);
+            if (item == null) {
+                continue;
+            }
+            for (MarketAppInfo app : extractSearchApps(item)) {
+                if (packages.add(app.getPackageName())) {
+                    apps.add(app);
+                }
             }
         }
         return apps;
@@ -914,12 +1221,12 @@ public final class XiaomiApiClient {
             JSONObject response,
             LinkedHashMap<String, InstalledPackageInfo> installedByPackage) throws IOException {
         List<UpdateInfo> updates = new ArrayList<>();
-        appendUpdates(response.optJSONArray("miuiApp"), installedByPackage, updates);
         appendUpdates(response.optJSONArray("listApp"), installedByPackage, updates);
+        appendUpdates(response.optJSONArray("miuiApp"), installedByPackage, updates);
         JSONObject data = response.optJSONObject("data");
         if (data != null) {
-            appendUpdates(data.optJSONArray("miuiApp"), installedByPackage, updates);
             appendUpdates(data.optJSONArray("listApp"), installedByPackage, updates);
+            appendUpdates(data.optJSONArray("miuiApp"), installedByPackage, updates);
         }
         return uniqueUpdates(updates);
     }
@@ -993,7 +1300,27 @@ public final class XiaomiApiClient {
             return null;
         }
         JSONObject matching = highestApk(apks, installedVersionCode, true);
-        return matching == null ? highestApk(apks, installedVersionCode, false) : matching;
+        if (matching != null) return matching;
+        JSONObject openEnded = highestOpenEndedApk(apks);
+        return openEnded == null ? highestApk(apks, installedVersionCode, false) : openEnded;
+    }
+
+    private JSONObject highestOpenEndedApk(JSONArray apks) {
+        JSONObject highest = null;
+        long highestVersionCode = 0;
+        for (int index = 0; index < apks.length(); index++) {
+            JSONObject apk = apks.optJSONObject(index);
+            if (apk == null || apk.optBoolean("downloadDisable", false)) continue;
+            long minimum = apk.optLong("minAppVersion", Long.MIN_VALUE);
+            long maximum = apk.optLong("maxAppVersion", OPEN_ENDED_APP_VERSION);
+            long versionCode = apk.optLong("versionCode", 0);
+            if (minimum <= 0 || maximum < OPEN_ENDED_APP_VERSION || versionCode <= 0) continue;
+            if (highest == null || versionCode > highestVersionCode) {
+                highest = apk;
+                highestVersionCode = versionCode;
+            }
+        }
+        return highest;
     }
 
     private JSONObject highestApk(JSONArray apks, long installedVersionCode, boolean enforceRange) {
@@ -1039,22 +1366,38 @@ public final class XiaomiApiClient {
         return unique;
     }
 
-    private void appendSearchApps(List<MarketAppInfo> apps, JSONObject item) throws IOException {
+    private List<MarketAppInfo> extractSearchApps(JSONObject item) {
         JSONObject data = item.optJSONObject("data");
         JSONArray nested = data == null ? null : data.optJSONArray("listApp");
         if (nested == null && data != null) {
             nested = data.optJSONArray("appList");
         }
+        List<MarketAppInfo> apps = new ArrayList<>();
         if (nested == null) {
-            apps.add(parseApp(unwrapSearchItem(item)));
-            return;
+            MarketAppInfo app = tryParseApp(unwrapSearchItem(item));
+            if (app != null) {
+                apps.add(app);
+            }
+            return apps;
         }
         for (int index = 0; index < nested.length(); index++) {
-            try {
-                apps.add(parseApp(unwrapSearchItem(nested.getJSONObject(index))));
-            } catch (JSONException exception) {
-                throw new IOException("Xiaomi API nested app item is invalid at index " + index, exception);
+            MarketAppInfo app = tryParseApp(unwrapSearchItem(nested.optJSONObject(index)));
+            if (app != null) {
+                apps.add(app);
             }
+        }
+        return apps;
+    }
+
+    private MarketAppInfo tryParseApp(JSONObject json) {
+        if (json == null || json.optString("packageName", "").isEmpty()) {
+            return null;
+        }
+        try {
+            return parseApp(json);
+        } catch (IOException exception) {
+            Log.w(TAG, "skip invalid search app", exception);
+            return null;
         }
     }
 
@@ -1128,9 +1471,8 @@ public final class XiaomiApiClient {
                 .ratingScore(json.optDouble("commentScore", json.optDouble("ratingScore", 0)))
                 .changeLog(json.optString("changeLog", ""))
                 .ad(json.optBoolean("isSearchTopAd", false))
-                .quickApp(json.optBoolean("isQuickApp", json.optBoolean("quickApp", false)))
-                .reservationApp(json.optBoolean(
-                        "isReservationApp", json.optBoolean("reservationApp", false)))
+                .quickApp(isQuickApp(json))
+                .reservationApp(isReservationApp(json))
                 .introduction(firstText(json, "briefShow", "introduction", "description"))
                 .downloadCount(json.optLong("downloadCount", 0))
                 .commentCount(XiaomiDetailParser.firstLong(json, "ratingTotalCount", "commentCount", "totalCommentCount", "commentNum"))
@@ -1141,23 +1483,51 @@ public final class XiaomiApiClient {
                 .build();
     }
 
-    private DownloadMetadata parseDownload(MarketAppInfo app, JSONObject response) throws IOException {
-        JSONArray apks = response.optJSONArray("apks");
-        if (apks == null) {
-            JSONObject data = response.optJSONObject("data");
-            apks = data == null ? null : data.optJSONArray("apks");
-        }
-        if (apks == null) {
-            throw new IOException("Xiaomi API download response has no apks");
-        }
-        List<ApkArtifact> artifacts = parseArtifacts(apks);
-        long totalSize = artifacts.stream().mapToLong(ApkArtifact::getSize).sum();
-        return new DownloadMetadata(app, artifacts, totalSize,
-                response.optString("versionName", app.getVersionName()),
-                response.optLong("versionCode", app.getVersionCode()));
+    private boolean isQuickApp(JSONObject json) {
+        return json.optBoolean("isQuickApp", json.optBoolean("quickApp", false))
+                || QUICK_GAME_TYPE.equals(json.optString("type", ""));
     }
 
-    private List<ApkArtifact> parseArtifacts(JSONArray apks) throws IOException {
+    private boolean isReservationApp(JSONObject json) {
+        boolean explicit = json.optBoolean(
+                "isReservationApp", json.optBoolean("reservationApp", false));
+        long versionCode = json.optLong("versionCode", 0);
+        int subscribeState = json.optInt("subscribeState", 0);
+        return explicit || (subscribeState > 0 && versionCode <= 0);
+    }
+
+    private DownloadMetadata parseDownload(MarketAppInfo app, JSONObject response) throws IOException {
+        JSONObject data = response.optJSONObject("data");
+        JSONObject source = response;
+        JSONArray apks = response.optJSONArray("apks");
+        if (apks == null && data != null) {
+            source = data;
+            apks = data.optJSONArray("apks");
+        }
+        if (apks == null) {
+            String reason = firstText(source, "unfitnessDesc", "errorDesc", "message", "msg");
+            throw new IOException(reason.isEmpty() ? "下载失败：无 APK 包体" : "下载失败：" + reason);
+        }
+        String host = downloadHost(response, source);
+        int diffVersion = response.optInt("bspatchVersion", source.optInt("bspatchVersion", 0));
+        List<ApkArtifact> artifacts = parseArtifacts(apks, host, diffVersion);
+        long totalSize = artifacts.stream().mapToLong(ApkArtifact::getSize).sum();
+        return new DownloadMetadata(app, artifacts, totalSize,
+                firstText(response, "versionName").isEmpty()
+                        ? source.optString("versionName", app.getVersionName())
+                        : response.optString("versionName"),
+                response.optLong("versionCode", source.optLong("versionCode", app.getVersionCode())));
+    }
+
+    private String downloadHost(JSONObject primary, JSONObject secondary) {
+        JSONArray hosts = primary.optJSONArray("hosts");
+        if (hosts == null) hosts = secondary.optJSONArray("hosts");
+        String host = hosts == null ? "" : hosts.optString(0, "");
+        return isBlank(host) ? DOWNLOAD_API : host;
+    }
+
+    private List<ApkArtifact> parseArtifacts(JSONArray apks, String host, int diffVersion)
+            throws IOException {
         List<ApkArtifact> artifacts = new ArrayList<>();
         for (int index = 0; index < apks.length(); index++) {
             try {
@@ -1166,22 +1536,22 @@ public final class XiaomiApiClient {
                 if (url.isEmpty()) {
                     throw new IOException("Xiaomi API artifact has no url at index " + index);
                 }
-                String name = item.optString("name", "base.apk");
+                String name = item.optString("name", "base");
                 String type = item.optString("type", "base");
                 String diffUrl = firstText(item, "diffUrl", "patchUrl");
                 long diffSize = item.optLong("diffSize", item.optLong("patchSize", 0));
                 String diffHash = firstText(item, "diffHash", "patchChecksum");
-                int diffVersion = item.optInt("patchVersion", 3);
+                int artifactDiffVersion = item.optInt("patchVersion", diffVersion);
                 artifacts.add(new ApkArtifact(
                         name,
                         type,
-                        normalizeDownload(url),
+                        normalizeDownload(url, host),
                         item.optLong("size", 0),
                         firstText(item, "hash", "checksum"),
-                        normalizeDownload(diffUrl),
+                        normalizeDownload(diffUrl, host),
                         diffSize,
                         diffHash,
-                        diffVersion,
+                        artifactDiffVersion,
                         item.optString("baseApkPath", "")));
             } catch (JSONException exception) {
                 throw new IOException("Xiaomi API artifact is invalid at index " + index, exception);
@@ -1272,13 +1642,16 @@ public final class XiaomiApiClient {
         return value;
     }
 
-    private String normalizeDownload(String value) {
+    private String normalizeDownload(String value, String host) {
         if (value.isEmpty()) {
             return value;
         }
         if (value.startsWith("http")) {
             return value;
         }
-        return DOWNLOAD_API + value;
+        if (!host.endsWith("/")) {
+            host += "/";
+        }
+        return host + value;
     }
 }

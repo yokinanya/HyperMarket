@@ -3,36 +3,30 @@ package com.hyper.market
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import java.io.File
 import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
+import coil3.SingletonImageLoader
+import coil3.request.ErrorResult
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 internal object ImageSaver {
     suspend fun save(context: Context, url: String): String = withContext(Dispatchers.IO) {
-        val bitmap = download(url)
-        if (bitmap == null) throw IllegalStateException("图片下载失败：$url")
-        if (Build.VERSION.SDK_INT >= 29) saveMediaStore(context, bitmap) else saveLegacy(context, bitmap)
-    }
-
-    private fun download(url: String): Bitmap? {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.connectTimeout = 15_000
-        connection.readTimeout = 30_000
-        connection.instanceFollowRedirects = true
-        connection.setRequestProperty("User-Agent", "Dalvik/2.1.0 (Linux; Android 16)")
-        return try {
-            if (connection.responseCode !in 200..299) return null
-            connection.inputStream.use(BitmapFactory::decodeStream)
-        } finally {
-            connection.disconnect()
+        val request = ImageRequest.Builder(context).data(url).build()
+        val result = SingletonImageLoader.get(context).execute(request)
+        val bitmap = if (result is SuccessResult) {
+            result.image.toBitmap()
+        } else {
+            val cause = (result as? ErrorResult)?.throwable
+            throw IllegalStateException("图片下载失败：$url", cause)
         }
+        if (Build.VERSION.SDK_INT >= 29) saveMediaStore(context, bitmap) else saveLegacy(context, bitmap)
     }
 
     private fun saveMediaStore(context: Context, bitmap: Bitmap): String {

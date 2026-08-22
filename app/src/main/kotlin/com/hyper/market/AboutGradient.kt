@@ -101,19 +101,6 @@ private const val AboutShader = """
         color.rgb += oppositeNoise * uLightOffset;
         color.a = clamp(color.a, 0.0, 1.0) * uAlphaMulti;
         color += (10.0 / 255.0) * gradientNoise(fragCoord) - (5.0 / 255.0);
-        float2 screenUv = fragCoord / uResolution;
-        float2 topCenterDistance = (screenUv - float2(0.5, 0.0)) / float2(0.58, 0.62);
-        float topCenterBlue = exp(-dot(topCenterDistance, topCenterDistance));
-        float2 topRightDistance = (screenUv - float2(1.0, 0.0)) / float2(0.52, 0.62);
-        float topRightLight = exp(-dot(topRightDistance, topRightDistance));
-        float2 lowerRightDistance = (screenUv - float2(1.08, 0.82)) / float2(0.46, 0.56);
-        float lowerRightBlue = exp(-dot(lowerRightDistance, lowerRightDistance));
-        float2 lowerCenterDistance = (screenUv - float2(0.5, 1.0)) / float2(0.52, 0.34);
-        float lowerCenterLight = exp(-dot(lowerCenterDistance, lowerCenterDistance));
-        color.rgb += topCenterBlue * float3(-0.075, -0.03, 0.025);
-        color.rgb += topRightLight * float3(0.0, 0.025, 0.035);
-        color.rgb += lowerRightBlue * float3(-0.18, -0.08, -0.01);
-        color.rgb += lowerCenterLight * float3(-0.025, 0.05, 0.02);
         return half4(color.rgb * color.a, color.a);
     }
 """
@@ -126,10 +113,10 @@ private val AboutPoints = floatArrayOf(
 )
 
 private val AboutColors = floatArrayOf(
-    0.66f, 0.75f, 1.0f, 1.0f,
-    1.0f, 0.86f, 0.91f, 1.0f,
-    0.74f, 0.76f, 1.0f, 1.0f,
-    0.97f, 0.77f, 0.84f, 1.0f,
+    1.0f, 0.82f, 0.9f, 1.0f,
+    0.86f, 0.82f, 1.0f, 1.0f,
+    1.0f, 0.7f, 0.84f, 1.0f,
+    0.56f, 0.64f, 1.0f, 1.0f,
 )
 
 @Composable
@@ -166,6 +153,7 @@ private fun AboutRuntimeGradient(modifier: Modifier) {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 private fun DrawScope.drawAboutShader(
     shader: RuntimeShader,
     paint: Paint,
@@ -174,7 +162,7 @@ private fun DrawScope.drawAboutShader(
     val aspectRatio = size.height / size.width
     shader.setFloatUniform("uResolution", size.width, size.height)
     shader.setFloatUniform("uAnimTime", animationTime)
-    shader.setFloatUniform("uBound", 0.0f, -0.224f, 1.0f, aspectRatio * 0.846f)
+    shader.setFloatUniform("uBound", 0.0f, -0.667f, 1.0f, aspectRatio)
     shader.setFloatUniform("uTranslateY", 0.0f)
     shader.setFloatUniform("uPoints", AboutPoints)
     shader.setFloatUniform("uColors", AboutColors)

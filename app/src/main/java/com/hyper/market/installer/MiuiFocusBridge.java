@@ -2,19 +2,20 @@ package com.hyper.market.installer;
 
 import android.app.Notification;
 import android.content.Context;
+import android.content.ContentProviderClient;
 import android.graphics.drawable.Icon;
 import android.os.Bundle;
+import android.os.Build;
 import android.provider.Settings;
 import android.util.Log;
 
 import com.hyper.market.R;
 
-import org.json.JSONObject;
+import java.util.function.Consumer;
 
 public final class MiuiFocusBridge {
     private static final String TAG = "MiuiFocusBridge";
     private static final String FOCUS_PROVIDER = "miui.statusbar.notification.public";
-    private static final String PARAM = "miui.focus.param";
     private static final String PICS = "miui.focus.pics";
 
     private MiuiFocusBridge() { }
@@ -29,7 +30,7 @@ public final class MiuiFocusBridge {
         }
         try {
             Bundle extras = notification.extras;
-            extras.putString(PARAM, focusParam(snapshot.protocol, title, content));
+            extras.putAll(buildFocusExtras(snapshot.protocol, title, content));
             Bundle pictures = new Bundle();
             pictures.putParcelable("key_logo", Icon.createWithResource(context, R.drawable.ic_launcher));
             extras.putBundle(PICS, pictures);
@@ -40,22 +41,75 @@ public final class MiuiFocusBridge {
         }
     }
 
-    private static String focusParam(int protocol, String title, String content) throws Exception {
-        JSONObject param = new JSONObject()
-                .put("ticker", title)
-                .put("showSmallIcon", true)
-                .put("updatable", true)
-                .put("enableFloat", true);
-        if (protocol >= 3) {
-            param.put("isShowNotification", true)
-                    .put("islandFirstFloat", true)
-                    .put("chatInfo", new JSONObject()
-                            .put("title", title)
-                            .put("content", content)
-                            .put("picProfile", "key_logo")
-                            .put("picProfileDark", "key_logo"));
+    private static Bundle buildFocusExtras(int protocol, String title, String content) {
+        try {
+            Class<?> notificationClass = Class.forName(
+                    "com.xzakota.hyper.notification.focus.FocusNotification");
+            String methodName = protocol >= 3 ? "buildV3" : "buildV2";
+            Consumer<Object> consumer = template -> {
+                try {
+                    configureTemplate(template, title, content, protocol >= 3);
+                } catch (ReflectiveOperationException exception) {
+                    throw new IllegalStateException("HyperNotification 模板配置失败", exception);
+                }
+            };
+            Object value = notificationClass.getMethod(methodName, Consumer.class)
+                    .invoke(null, consumer);
+            return (Bundle) value;
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("HyperNotification API 不可用", exception);
         }
-        return param.toString();
+    }
+
+    private static void configureTemplate(
+            Object template,
+            String title,
+            String content,
+            boolean v3) throws ReflectiveOperationException {
+        invoke(template, "setTicker", String.class, title);
+        invoke(template, "setShowSmallIcon", Boolean.class, true);
+        invoke(template, "setUpdatable", Boolean.class, true);
+        invoke(template, "setEnableFloat", Boolean.class, true);
+        configureTextBlock(template, "baseInfo", title, content);
+        configureTextBlock(template, "hintInfo", title, content);
+        if (v3) {
+            invoke(template, "setShowNotification", Boolean.class, true);
+            invoke(template, "setIslandFirstFloat", Boolean.class, true);
+            invoke(template, "chatInfo", Consumer.class, (Consumer<Object>) info -> {
+                try {
+                    invoke(info, "setTitle", String.class, title);
+                    invoke(info, "setContent", String.class, content);
+                    invoke(info, "setPicProfile", String.class, "key_logo");
+                    invoke(info, "setPicProfileDark", String.class, "key_logo");
+                } catch (ReflectiveOperationException exception) {
+                    throw new IllegalStateException("HyperNotification 聊天模板配置失败", exception);
+                }
+            });
+        }
+    }
+
+    private static void configureTextBlock(
+            Object template,
+            String methodName,
+            String title,
+            String content) throws ReflectiveOperationException {
+        invoke(template, methodName, Consumer.class, (Consumer<Object>) info -> {
+            try {
+                invoke(info, "setType", Integer.class, 1);
+                invoke(info, "setTitle", String.class, title);
+                invoke(info, "setContent", String.class, content);
+            } catch (ReflectiveOperationException exception) {
+                throw new IllegalStateException("HyperNotification 文本模板配置失败", exception);
+            }
+        });
+    }
+
+    private static Object invoke(
+            Object target,
+            String methodName,
+            Class<?> parameterType,
+            Object argument) throws ReflectiveOperationException {
+        return target.getClass().getMethod(methodName, parameterType).invoke(target, argument);
     }
 
     private static final class Snapshot {
@@ -92,16 +146,38 @@ public final class MiuiFocusBridge {
             try {
                 Bundle arguments = new Bundle();
                 arguments.putString("package", context.getPackageName());
-                Bundle result = context.getContentResolver().call(
-                        FOCUS_PROVIDER, "canShowFocus", null, arguments);
+                Bundle result = callFocusProvider(context, arguments);
                 return result != null && result.getBoolean("canShowFocus", false);
             } catch (Exception exception) {
                 return false;
             }
         }
 
+        private static Bundle callFocusProvider(Context context, Bundle arguments)
+                throws Exception {
+            if (Build.VERSION.SDK_INT >= 29) {
+                return context.getContentResolver().call(
+                        FOCUS_PROVIDER, "canShowFocus", null, arguments);
+            }
+            ContentProviderClient client = context.getContentResolver()
+                    .acquireUnstableContentProviderClient(FOCUS_PROVIDER);
+            if (client == null) {
+                return null;
+            }
+            try {
+                return client.call("canShowFocus", null, arguments);
+            } finally {
+                if (Build.VERSION.SDK_INT >= 24) {
+                    client.close();
+                } else {
+                    client.release();
+                }
+            }
+        }
+
         private boolean supported() {
-            return (protocol == 2 || (protocol >= 3 && island)) && permission;
+            return Build.VERSION.SDK_INT >= 27 &&
+                    (protocol == 2 || (protocol >= 3 && island)) && permission;
         }
 
         @Override

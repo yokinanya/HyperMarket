@@ -1,7 +1,6 @@
 package com.hyper.market.api;
 
 import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -87,7 +86,7 @@ public final class XiaomiApiSigner {
         List<String> pairs = queryPairs(parts.length == 2 ? parts[1] : "");
         pairs.add("_n=" + nonce);
         pairs.add("_p=" + signedKeys(pairs));
-        return pathForSignature(parts[0]) + joinSignedPairs(pairs);
+        return pathForSignature(parts[0]) + "\n" + joinSignedPairs(pairs);
     }
 
     private static String pathForSignature(String urlWithoutQuery) {
@@ -105,10 +104,18 @@ public final class XiaomiApiSigner {
         for (String pair : query.split("&")) {
             if (!pair.isEmpty() && !pair.startsWith("_n=")
                     && !pair.startsWith("_s=") && !pair.startsWith("_v=")) {
-                result.add(pair);
+                result.add(urlDecode(pair));
             }
         }
         return result;
+    }
+
+    private static String urlDecode(String value) {
+        try {
+            return java.net.URLDecoder.decode(value, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException exception) {
+            throw new IllegalStateException("UTF-8 is unavailable", exception);
+        }
     }
 
     private static String signedKeys(List<String> pairs) {
@@ -134,15 +141,12 @@ public final class XiaomiApiSigner {
                 for (int valueIndex = equals + 1; valueIndex < pair.length(); valueIndex++) {
                     result.insert(insertAt, pair.charAt(valueIndex));
                 }
-            } else {
-                result.append(pair);
+                if (index < pairs.size() - 1) {
+                    result.append('=');
+                }
+            } else if (index == pairs.size() - 1 && result.toString().endsWith("=")) {
+                result.deleteCharAt(result.length() - 1);
             }
-            if (index < pairs.size() - 1) {
-                result.append('=');
-            }
-        }
-        if (result.toString().endsWith("=")) {
-            result.deleteCharAt(result.length() - 1);
         }
         return result.toString();
     }
@@ -249,11 +253,24 @@ public final class XiaomiApiSigner {
     }
 
     private static String urlEncode(String value) {
-        try {
-            return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20");
-        } catch (UnsupportedEncodingException exception) {
-            throw new IllegalStateException("UTF-8 is unavailable", exception);
+        StringBuilder encoded = new StringBuilder(value.length());
+        for (byte item : value.getBytes(StandardCharsets.UTF_8)) {
+            int unsigned = item & 0xff;
+            if (isUnreserved(unsigned)) {
+                encoded.append((char) unsigned);
+            } else {
+                encoded.append('%');
+                encoded.append(String.format(java.util.Locale.ROOT, "%02X", unsigned));
+            }
         }
+        return encoded.toString();
+    }
+
+    private static boolean isUnreserved(int value) {
+        return value >= 'a' && value <= 'z'
+                || value >= 'A' && value <= 'Z'
+                || value >= '0' && value <= '9'
+                || value == '-' || value == '.' || value == '_' || value == '~';
     }
 
     private static final java.util.Set<String> SIGNED_KEYS = SetFactory.create();

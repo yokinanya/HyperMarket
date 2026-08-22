@@ -23,7 +23,6 @@ public final class InstallResultReceiver extends BroadcastReceiver {
     public static final String EXTRA_ICON_URL = "install_icon_url";
     public static final String EXTRA_FIRST_INSTALL = "install_first_install";
     public static final String EXTRA_SAVE_TO_DOWNLOADS = "install_save_to_downloads";
-    public static final String EXTRA_DELETE_AFTER_INSTALL = "install_delete_after_install";
     public static final String EXTRA_FILES = "install_files";
     public static final String EXTRA_ARTIFACT_NAMES = "install_artifact_names";
 
@@ -31,24 +30,27 @@ public final class InstallResultReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         int status = intent.getIntExtra("android.content.pm.extra.STATUS", -1);
         if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            InstallUiStateStore.awaiting(required(intent, EXTRA_PACKAGE_NAME));
             openUserAction(context, intent);
             return;
         }
         String message = intent.getStringExtra("android.content.pm.extra.STATUS_MESSAGE");
-        String text;
         if (status == 0) {
             try {
                 complete(context, intent);
+                InstallUiStateStore.complete(required(intent, EXTRA_PACKAGE_NAME));
                 DownloadNotification.complete(context, displayName(intent));
-                text = "安装完成";
             } catch (IOException | RuntimeException exception) {
-                text = "安装完成，但安装包处理失败: " + exception.getMessage();
+                String processingMessage = "安装完成，但安装包处理失败: " + exception.getMessage();
+                DownloadNotification.failure(context, processingMessage);
+                Toast.makeText(context, processingMessage, Toast.LENGTH_LONG).show();
             }
         } else {
+            InstallUiStateStore.failure(required(intent, EXTRA_PACKAGE_NAME),
+                    message == null ? "安装失败" : message);
             DownloadNotification.failure(context, "安装失败: " + message);
-            text = "安装失败: " + message;
+            Toast.makeText(context, "安装失败: " + message, Toast.LENGTH_LONG).show();
         }
-        Toast.makeText(context, text, Toast.LENGTH_LONG).show();
     }
 
     private void openUserAction(Context context, Intent result) {
@@ -77,7 +79,6 @@ public final class InstallResultReceiver extends BroadcastReceiver {
                 intent.getBooleanExtra(EXTRA_FIRST_INSTALL, false),
                 false,
                 intent.getBooleanExtra(EXTRA_SAVE_TO_DOWNLOADS, false),
-                intent.getBooleanExtra(EXTRA_DELETE_AFTER_INSTALL, false),
                 "",
                 intent.getStringExtra(EXTRA_ICON_URL));
         InstallCompletion.complete(context, options, files, nameValues);
@@ -85,12 +86,16 @@ public final class InstallResultReceiver extends BroadcastReceiver {
 
     private String required(Intent intent, String key) {
         String value = intent.getStringExtra(key);
-        if (value == null || value.isBlank()) throw new IllegalStateException("缺少安装结果字段：" + key);
+        if (isBlank(value)) throw new IllegalStateException("缺少安装结果字段：" + key);
         return value;
     }
 
     private String displayName(Intent intent) {
         String value = intent.getStringExtra(EXTRA_DISPLAY_NAME);
-        return value == null || value.isBlank() ? required(intent, EXTRA_PACKAGE_NAME) : value;
+        return isBlank(value) ? required(intent, EXTRA_PACKAGE_NAME) : value;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 }

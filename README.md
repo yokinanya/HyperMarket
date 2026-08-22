@@ -17,6 +17,6 @@
 ./gradlew :app:assembleDebug
 ```
 
-debug 变体的 applicationId 是 `com.hyper.market.rebuilt`，可以和原版并行安装。release 变体使用 `com.hyper.market`，但没有原维护者的签名私钥，不能覆盖正式原版安装包。
+debug/release 变体统一使用 `org.hyper.market`，可以和原版 `com.hyper.market` 并行安装，不需要在完成复刻后再改包名。
 
-测试时应明确使用重构包名，避免把原版 `com.hyper.market` 与重构版混淆。安装包和 `app/build/` 均为生成物，不提交到仓库。
+测试时应明确使用重构包名 `org.hyper.market`，避免把原版 `com.hyper.market` 与重构版混淆。安装包和 `app/build/` 均为生成物，不提交到仓库。

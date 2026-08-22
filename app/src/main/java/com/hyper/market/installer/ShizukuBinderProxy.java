@@ -24,8 +24,7 @@ final class ShizukuBinderProxy implements IBinder {
             request.writeInt(code);
             request.writeInt(flags);
             request.appendFrom(data, 0, data.dataSize());
-            service.transact(1, request, reply, 0);
-            return true;
+            return service.transact(1, request, reply, 0);
         } finally {
             request.recycle();
         }

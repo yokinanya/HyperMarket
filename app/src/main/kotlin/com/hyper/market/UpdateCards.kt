@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -123,13 +124,9 @@ private fun UpdateCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Text(
-                    formatUpdateSize(update),
-                    color = Color(0xFF777777),
-                    style = compactTextStyle(14.sp, 16.sp),
-                )
+                UpdateSizeText(update)
             }
-            ActionPill("更新") { onInstall(app) }
+            InstallActionPill(app, "更新", onInstall)
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -167,6 +164,24 @@ private fun UpdateCard(
 }
 
 @Composable
+private fun UpdateSizeText(update: UpdateInfo) {
+    val style = compactTextStyle(14.sp, 16.sp)
+    if (update.diffSize <= 0 || update.diffSize >= update.app.apkSize) {
+        Text(formatBytes(update.app.apkSize), color = Color(0xFF777777), style = style)
+        return
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(formatBytes(update.diffSize), color = Color(0xFF777777), style = style)
+        Text(
+            formatBytes(update.app.apkSize),
+            color = Color(0xFF777777),
+            style = style,
+            textDecoration = TextDecoration.LineThrough,
+        )
+    }
+}
+
+@Composable
 internal fun EmptyUpdates() {
     Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
         Text("所有已安装应用均为最新版本", color = Color(0xFF777777), modifier = Modifier.padding(24.dp))
@@ -178,10 +193,3 @@ private fun compactTextStyle(fontSize: TextUnit, lineHeight: TextUnit) = TextSty
     lineHeight = lineHeight,
     platformStyle = PlatformTextStyle(includeFontPadding = false),
 )
-
-private fun formatUpdateSize(update: UpdateInfo): String =
-    if (update.diffSize > 0 && update.diffSize < update.app.apkSize) {
-        "${formatBytes(update.diffSize)}  ${formatBytes(update.app.apkSize)}"
-    } else {
-        formatBytes(update.app.apkSize)
-    }

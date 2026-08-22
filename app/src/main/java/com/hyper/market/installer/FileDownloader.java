@@ -2,6 +2,8 @@ package com.hyper.market.installer;
 
 import com.hyper.market.model.ApkArtifact;
 
+import android.os.Build;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -9,6 +11,9 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
@@ -16,8 +21,15 @@ public final class FileDownloader {
     private static final int CONNECT_TIMEOUT_MS = 15_000;
     private static final int READ_TIMEOUT_MS = 60_000;
     private static final int BUFFER_SIZE = 64 * 1024;
+    private final Map<String, String> requestHeaders;
 
-    public FileDownloader() { }
+    public FileDownloader() {
+        this(defaultHeaders());
+    }
+
+    public FileDownloader(Map<String, String> requestHeaders) {
+        this.requestHeaders = Collections.unmodifiableMap(new LinkedHashMap<>(requestHeaders));
+    }
 
     public File download(File directory, ApkArtifact artifact) throws IOException {
         return download(directory, artifact, new DownloadControl(), null);
@@ -91,8 +103,20 @@ public final class FileDownloader {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
         connection.setReadTimeout(READ_TIMEOUT_MS);
-        connection.setRequestProperty("User-Agent", "HyperMarketRebuilt/0.1");
+        for (Map.Entry<String, String> entry : requestHeaders.entrySet()) {
+            connection.setRequestProperty(entry.getKey(), entry.getValue());
+        }
         return connection;
+    }
+
+    private static Map<String, String> defaultHeaders() {
+        LinkedHashMap<String, String> headers = new LinkedHashMap<>();
+        headers.put("User-Agent", "Dalvik/2.1.0 (Linux; U; Android "
+                + Build.VERSION.RELEASE + "; " + Build.MODEL + " Build/" + Build.ID + ")");
+        headers.put("x-pkg-name", "com.xiaomi.market");
+        headers.put("x-version-name", "4.120.1");
+        headers.put("x-version-code", "40007441");
+        return headers;
     }
 
     private void writeBody(InputStream input, File target, long offset, long expectedSize,
@@ -144,7 +168,7 @@ public final class FileDownloader {
     }
 
     private void verifyChecksum(File file, String name, String expected) throws IOException {
-        if (expected == null || expected.isBlank()) return;
+        if (expected == null || expected.trim().isEmpty()) return;
         String algorithm = expected.length() == 64 ? "SHA-256" : "MD5";
         try {
             MessageDigest digest = MessageDigest.getInstance(algorithm);

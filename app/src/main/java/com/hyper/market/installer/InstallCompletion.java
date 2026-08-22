@@ -29,9 +29,7 @@ public final class InstallCompletion {
         if (options.isSaveToDownloads()) {
             saveFiles(context, store, app, files, artifactNames);
         }
-        if (options.isDeleteAfterInstall()) {
-            deleteFiles(files);
-        }
+        deleteTemporaryFiles(files);
         store.recordHistory(app, options.isFirstInstall());
     }
 
@@ -47,11 +45,12 @@ public final class InstallCompletion {
         store.recordSavedPackageGroup(app, artifacts);
     }
 
-    private static void deleteFiles(List<File> files) throws IOException {
+    private static void deleteTemporaryFiles(List<File> files) throws IOException {
         for (File file : files) {
-            if (file.exists() && !file.delete()) {
-                throw new IOException("无法删除安装包：" + file.getAbsolutePath());
+            if (file.isFile() && !file.delete()) {
+                throw new IOException("无法删除安装临时文件：" + file.getAbsolutePath());
             }
         }
     }
+
 }

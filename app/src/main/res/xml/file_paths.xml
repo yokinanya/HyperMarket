@@ -2,5 +2,6 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <files-path name="downloads" path="downloads/" />
     <external-files-path name="external_files_downloads" path="Download/HyperMarket/" />
+    <external-files-path name="temporary_downloads" path="downloads/" />
     <external-path name="external_downloads" path="Download/HyperMarket/" />
 </paths>

@@ -16,11 +16,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -32,9 +34,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 
@@ -67,9 +70,15 @@ internal fun SettingsAboutPage(onBack: () -> Unit) {
             item { AboutHero() }
             item { AboutLinksSection(context) }
         }
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 3.dp).size(48.dp),
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(start = 12.dp, top = 3.dp)
+                .size(48.dp)
+                .zIndex(1f)
+                .clickable(onClick = onBack),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(MiuixIcons.Back, contentDescription = "返回", modifier = Modifier.size(24.dp))
         }
@@ -80,6 +89,7 @@ internal fun SettingsAboutPage(onBack: () -> Unit) {
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .alpha(if (showCompactTitle) 1f else 0f)
+                .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(top = 11.5.dp),
         )
     }
@@ -87,12 +97,16 @@ internal fun SettingsAboutPage(onBack: () -> Unit) {
 
 @Composable
 private fun AboutHero() {
+    val context = LocalContext.current
+    val appIcon = androidx.compose.runtime.remember {
+        context.packageManager.getApplicationIcon(context.packageName)
+    }
     Box(modifier = Modifier.fillMaxWidth().height(486.5.dp)) {
         AndroidView(
             factory = {
                 ImageView(it).apply {
                     scaleType = ImageView.ScaleType.FIT_XY
-                    setImageDrawable(it.packageManager.getApplicationIcon(it.packageName))
+                    setImageDrawable(appIcon)
                     contentDescription = "应用商店"
                 }
             },

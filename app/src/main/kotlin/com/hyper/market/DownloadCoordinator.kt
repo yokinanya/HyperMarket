@@ -7,6 +7,7 @@ import com.hyper.market.installer.FileDownloader
 import com.hyper.market.installer.InstallCompletion
 import com.hyper.market.installer.DownloadNotification
 import com.hyper.market.installer.DownloadControl
+import com.hyper.market.installer.DownloadCancelledException
 import com.hyper.market.installer.DownloadTaskRegistry
 import com.hyper.market.installer.DeltaPatcher
 import com.hyper.market.installer.InstallOptions
@@ -27,6 +28,7 @@ class DownloadCoordinator(
         onStatus: suspend (String) -> Unit,
     ) {
         val control = DownloadTaskRegistry.begin()
+        InstallUiStateStore.begin(app.getPackageName(), app.getDisplayName())
         DownloadNotification.begin(context, app.getDisplayName())
         try {
             val synchronous = performDownloadAndInstall(context, app, settings, control) { status ->
@@ -34,11 +36,16 @@ class DownloadCoordinator(
                 onStatus(status)
             }
             if (synchronous) {
+                InstallUiStateStore.complete(app.getPackageName())
                 DownloadNotification.complete(context, app.getDisplayName())
             } else {
                 DownloadNotification.update(context, "等待安装结果…")
             }
+        } catch (_: DownloadCancelledException) {
+            InstallUiStateStore.dismiss(app.getPackageName())
+            DownloadNotification.cancel(context)
         } catch (exception: Exception) {
+            InstallUiStateStore.failure(app.getPackageName(), exception.message ?: "未知错误")
             DownloadNotification.failure(context, exception.message ?: "未知错误")
             throw exception
         } finally {
@@ -65,6 +72,7 @@ class DownloadCoordinator(
                 metadata.artifacts.size, capabilities, control, onStatus,
             )
         }
+        InstallUiStateStore.installing(target.packageName)
         onStatus("正在安装…")
         val options = InstallOptions(
             settings.installerMode,
@@ -75,7 +83,6 @@ class DownloadCoordinator(
             !isInstalled(context, target.packageName),
             settings.noUserAction && capabilities.userActionNotRequiredConfigurable,
             settings.saveToDownloads,
-            settings.deleteAfterInstall,
             settings.customInstallerPackage,
             target.iconUrl,
         )
@@ -83,9 +90,8 @@ class DownloadCoordinator(
         if (synchronous) {
             InstallCompletion.complete(context, options, files, metadata.artifacts.map { it.name })
         } else if (settings.installerMode == "第三方安装器") {
+            InstallUiStateStore.awaiting(target.packageName)
             onStatus("已交给第三方安装器，安装结果由第三方应用返回")
-        } else {
-            onStatus("等待系统确认安装…")
         }
         synchronous
     }
@@ -130,11 +136,19 @@ class DownloadCoordinator(
             }
             return downloader.download(directory, artifact, control) { downloaded, expected ->
                 DownloadNotification.update(context, downloadProgress(index, total, downloaded, expected))
+                InstallUiStateStore.downloading(
+                    app.packageName,
+                    overallProgress(index, total, downloaded, expected),
+                )
             }
         }
         onStatus("正在下载增量补丁 ${index + 1}/${total}…")
         val patch = downloader.downloadDelta(directory, artifact, control) { downloaded, expected ->
             DownloadNotification.update(context, downloadProgress(index, total, downloaded, expected))
+            InstallUiStateStore.downloading(
+                app.packageName,
+                overallProgress(index, total, downloaded, expected),
+            )
         }
         val output = File(directory, safeArtifactName(artifact.name))
         val patcher = DeltaPatcher()
@@ -173,6 +187,12 @@ class DownloadCoordinator(
     private fun downloadProgress(index: Int, total: Int, downloaded: Long, expected: Long): String {
         val suffix = if (expected > 0) " ${downloaded * PERCENT_SCALE / expected}%" else ""
         return "正在下载 ${index + 1}/$total$suffix"
+    }
+
+    private fun overallProgress(index: Int, total: Int, downloaded: Long, expected: Long): Int? {
+        if (expected <= 0 || total <= 0) return null
+        val artifactProgress = downloaded.coerceAtMost(expected).toDouble() / expected
+        return (((index + artifactProgress) / total) * PERCENT_SCALE).toInt()
     }
 
     private companion object {

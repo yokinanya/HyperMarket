@@ -30,6 +30,10 @@ public final class ShizukuBridge {
         attached = false;
     }
 
+    public static IBinder getServiceBinder() {
+        return service;
+    }
+
     static PackageInstaller packageInstaller(Context context) throws Exception {
         IBinder shizuku = serviceBinder(context.getPackageName());
         requirePermission(shizuku);

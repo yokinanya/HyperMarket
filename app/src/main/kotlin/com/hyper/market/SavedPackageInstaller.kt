@@ -28,7 +28,6 @@ class SavedPackageInstaller(private val installer: ApkInstaller) {
             !isInstalled(context, entry.packageName),
             settings.noUserAction && InstallerCapabilities.read(context).userActionNotRequiredConfigurable,
             false,
-            false,
             settings.customInstallerPackage,
             entry.iconUrl,
         )

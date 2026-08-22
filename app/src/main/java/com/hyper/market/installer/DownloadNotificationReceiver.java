@@ -17,6 +17,11 @@ public final class DownloadNotificationReceiver extends BroadcastReceiver {
         String action = intent.getAction();
         if (control != null) {
             DownloadTaskRegistry.applyCurrent(action);
+            if (ACTION_PAUSE.equals(action)) {
+                com.hyper.market.InstallUiStateStore.pauseCurrent();
+            } else if (ACTION_RESUME.equals(action)) {
+                com.hyper.market.InstallUiStateStore.resumeCurrent();
+            }
             DownloadNotification.refresh(context);
             return;
         }

@@ -57,7 +57,7 @@ class DownloadService : Service() {
         )
         scope.launch {
             try {
-                DownloadCoordinator(apiClient, FileDownloader(), ApkInstaller())
+                DownloadCoordinator(apiClient, FileDownloader(apiClient.downloadHeaders()), ApkInstaller())
                     .downloadAndInstallAll(this@DownloadService, apps, settings) { }
             } catch (exception: Exception) {
                 DownloadNotification.failure(this@DownloadService, exception.message ?: "下载失败")
@@ -111,7 +111,6 @@ class DownloadService : Service() {
         customInstallerPackage = intent.getStringExtra("customInstallerPackage").orEmpty(),
         noUserAction = intent.getBooleanExtra("noUserAction", false),
         saveToDownloads = intent.getBooleanExtra("saveToDownloads", true),
-        deleteAfterInstall = intent.getBooleanExtra("deleteAfterInstall", false),
     )
 
     companion object {
@@ -166,7 +165,6 @@ class DownloadService : Service() {
             putExtra("customInstallerPackage", settings.customInstallerPackage)
             putExtra("noUserAction", settings.noUserAction)
             putExtra("saveToDownloads", settings.saveToDownloads)
-            putExtra("deleteAfterInstall", settings.deleteAfterInstall)
             putExtra("profileSource", profileSource)
             putExtra("profileOverrides", JSONObject(profileOverrides).toString())
         }

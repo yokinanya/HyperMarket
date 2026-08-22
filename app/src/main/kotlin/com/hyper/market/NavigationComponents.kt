@@ -1,6 +1,8 @@
 package com.hyper.market
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -13,6 +15,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,9 +33,26 @@ import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Update
 
-internal fun <S> androidx.compose.animation.AnimatedContentTransitionScope<S>.routeTransition() =
-    (slideInHorizontally(tween(320)) { it } + fadeIn(tween(220))) togetherWith
-        (slideOutHorizontally(tween(260)) { -it / 3 } + fadeOut(tween(160)))
+internal fun androidx.compose.animation.AnimatedContentTransitionScope<String>.routeTransition() =
+    when {
+        initialState.startsWith("tab-") && targetState.startsWith("tab-") ->
+            EnterTransition.None togetherWith ExitTransition.None
+        else -> {
+            val forward = routeDepth(targetState) >= routeDepth(initialState)
+            val direction = if (forward) 1 else -1
+            val enteringDuration = if (isAboutRoute(targetState)) 320 else 300
+            val leavingDuration = if (isAboutRoute(initialState)) 260 else 240
+            (slideInHorizontally(tween(enteringDuration)) { it * direction / 4 } + fadeIn(tween(220))) togetherWith
+                (slideOutHorizontally(tween(leavingDuration)) { -it * direction / 6 } + fadeOut(tween(180)))
+        }
+    }
+
+private fun isAboutRoute(route: String): Boolean = route == "settings-about"
+
+private fun routeDepth(route: String): Int = when {
+    route == "detail" || route == "today-article" || route.startsWith("settings-") -> 1
+    else -> 0
+}
 
 @Composable
 internal fun MarketNavigation(selected: Int, onSelected: (Int) -> Unit) {
@@ -56,12 +77,16 @@ internal fun MarketNavigation(selected: Int, onSelected: (Int) -> Unit) {
 @Composable
 internal fun MainPage(
     selected: Int,
+    searchSession: SearchSessionState,
+    searchListState: LazyListState,
+    settingsScrollState: ScrollState,
     apiClient: XiaomiApiClient,
     settings: AppSettings,
     updateStore: UpdateStore,
     packageVisibilityRefresh: Int,
     onOpenDetail: (MarketAppInfo) -> Unit,
     onOpenArticle: (String) -> Unit,
+    onOpenUpdates: () -> Unit,
     onInstall: (MarketAppInfo) -> Unit,
     onInstallAll: (List<MarketAppInfo>) -> Unit,
     onOpenSettings: (SettingsDestination) -> Unit,
@@ -77,7 +102,15 @@ internal fun MainPage(
         label = "tab-transition",
     ) { tab ->
         when (tab) {
-            0 -> TodayPage(apiClient, onOpenDetail, onOpenArticle)
+            0 -> TodayPage(
+                settings,
+                apiClient,
+                updateStore,
+                packageVisibilityRefresh,
+                onOpenDetail,
+                onOpenArticle,
+                onOpenUpdates,
+            )
             1 -> UpdatesPage(
                 settings,
                 apiClient,
@@ -87,8 +120,8 @@ internal fun MainPage(
                 onInstall,
                 onInstallAll,
             )
-            2 -> SearchPage(settings, apiClient, onOpenDetail, onInstall)
-            else -> SettingsPage(settings, onSettingsChange, onOpenSettings)
+            2 -> SearchPage(searchSession, searchListState, settings, apiClient, onOpenDetail, onInstall)
+            else -> SettingsPage(settings, settingsScrollState, onSettingsChange, onOpenSettings)
         }
     }
 }

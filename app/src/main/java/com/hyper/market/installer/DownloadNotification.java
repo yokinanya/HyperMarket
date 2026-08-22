@@ -7,6 +7,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
+import android.os.SystemClock;
 
 import androidx.core.app.NotificationCompat;
 
@@ -17,6 +18,10 @@ public final class DownloadNotification {
     private static final String CHANNEL_ID = "package_install";
     private static final String ALERT_CHANNEL_ID = "install_alerts";
     private static final int NOTIFICATION_ID = 4101;
+    private static final int ALERT_NOTIFICATION_ID = 4102;
+    private static final long UPDATE_INTERVAL_MS = 500L;
+    private static long lastUpdateAt;
+    private static String lastUpdateContent;
 
     public static int notificationId() { return NOTIFICATION_ID; }
 
@@ -31,7 +36,7 @@ public final class DownloadNotification {
     }
 
     public static void complete(Context context, String name) {
-        post(context, "已完成：" + name, false);
+        cancel(context);
     }
 
     public static void failure(Context context, String message) {
@@ -40,6 +45,14 @@ public final class DownloadNotification {
 
     public static void refresh(Context context) {
         post(context, "下载任务控制", true);
+    }
+
+    public static void cancel(Context context) {
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        if (manager != null) {
+            manager.cancel(NOTIFICATION_ID);
+            manager.cancel(ALERT_NOTIFICATION_ID);
+        }
     }
 
     public static Notification foreground(Context context, String content) {
@@ -53,8 +66,19 @@ public final class DownloadNotification {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (manager == null) throw new IllegalStateException("系统通知服务不可用");
         createChannel(context, manager);
-        String channel = ongoing ? CHANNEL_ID : ALERT_CHANNEL_ID;
-        manager.notify(NOTIFICATION_ID, build(context, content, ongoing, channel));
+        if (ongoing) {
+            long now = SystemClock.elapsedRealtime();
+            if (content.equals(lastUpdateContent) || now - lastUpdateAt < UPDATE_INTERVAL_MS) {
+                return;
+            }
+            lastUpdateAt = now;
+            lastUpdateContent = content;
+            manager.notify(NOTIFICATION_ID, build(context, content, true, CHANNEL_ID));
+            return;
+        }
+        manager.cancel(NOTIFICATION_ID);
+        lastUpdateContent = null;
+        manager.notify(ALERT_NOTIFICATION_ID, build(context, content, false, ALERT_CHANNEL_ID));
     }
 
     private static Notification build(Context context, String content, boolean ongoing,
@@ -80,8 +104,9 @@ public final class DownloadNotification {
             builder.addAction(action(context, DownloadNotificationReceiver.ACTION_CANCEL, "取消"));
         }
         Notification notification = builder.build();
-        boolean islandEnabled = new com.hyper.market.SettingsStore(context)
-                .read().getXiaomiIslandOptimization();
+        com.hyper.market.AppSettings settings = new com.hyper.market.SettingsStore(context).read();
+        boolean islandEnabled = settings.getXiaomiIslandOptimization()
+            && !"第三方安装器".equals(settings.getInstallerMode());
         MiuiFocusBridge.apply(context, notification, context.getString(R.string.app_name), content,
                 islandEnabled);
         return notification;

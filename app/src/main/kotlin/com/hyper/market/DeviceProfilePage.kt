@@ -45,9 +45,10 @@ internal fun DeviceProfilePage(
     profile: MarketProfileSettings,
     onProfileChange: (MarketProfileSettings) -> Unit,
 ) {
-    val metrics = LocalContext.current.resources.displayMetrics
+    val context = LocalContext.current
+    val metrics = context.resources.displayMetrics
     val values = remember(profile.source, profile.overrides, metrics) {
-        effectiveDeviceProfile(profile, metrics)
+        effectiveDeviceProfile(profile, context, metrics)
     }
     var showTemplateDialog by remember { mutableStateOf(false) }
     Column(
@@ -55,7 +56,7 @@ internal fun DeviceProfilePage(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ProfileSourceSelector(profile.source) { source ->
-            onProfileChange(selectProfileSource(profile, source, values, metrics))
+            onProfileChange(selectProfileSource(profile, source, values, context, metrics))
         }
         DEVICE_PROFILE_FIELDS.forEach { field ->
             ProfileInputCard(field, values[field.key].orEmpty()) { value ->
@@ -91,11 +92,12 @@ private fun selectProfileSource(
     profile: MarketProfileSettings,
     source: String,
     currentValues: Map<String, String>,
+    context: android.content.Context,
     metrics: DisplayMetrics,
 ): MarketProfileSettings {
     if (source == "custom") {
         val values = if (profile.source == "custom") currentValues
-        else effectiveDeviceProfile(profile, metrics)
+        else effectiveDeviceProfile(profile, context, metrics)
         return profile.copy(source = source, overrides = values, currentTemplate = "")
     }
     return profile.copy(source = source, overrides = emptyMap(), currentTemplate = "")

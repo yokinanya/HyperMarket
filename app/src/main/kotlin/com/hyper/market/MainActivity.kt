@@ -1,6 +1,9 @@
 package com.hyper.market
 
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,12 +26,18 @@ class MainActivity : ComponentActivity() {
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { }
+    private val packageChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            packageVisibilityRefresh.value++
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         requestPackageVisibilityPermission()
         requestNotificationPermission()
+        registerPackageChangeReceiver()
         deepLinkApp.value = intent.toMarketApp()
         setContent {
             HyperMarketApp(
@@ -38,6 +47,26 @@ class MainActivity : ComponentActivity() {
                 onRequestInstallPermission = ::requestInstallPermission,
             )
         }
+    }
+
+    override fun onDestroy() {
+        unregisterReceiver(packageChangeReceiver)
+        super.onDestroy()
+    }
+
+    private fun registerPackageChangeReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addDataScheme("package")
+        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            packageChangeReceiver,
+            filter,
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -76,17 +105,19 @@ class MainActivity : ComponentActivity() {
         val queryCandidates = listOf(
             uri.getQueryParameter("packageName"),
             uri.getQueryParameter("package"),
+            uri.getQueryParameter("pkg"),
             uri.getQueryParameter("pName"),
             uri.getQueryParameter("pname"),
             uri.getQueryParameter("id"),
+            getStringExtra(Intent.EXTRA_PACKAGE_NAME),
         )
         val pathCandidates = uri.pathSegments
         val packageName = (queryCandidates + pathCandidates).filterNotNull()
-            .firstOrNull { it.matches(PACKAGE_NAME) }
+            .firstOrNull(::isPackageName)
             ?: return null
         val id = queryCandidates.filterNotNull().firstOrNull { it.toLongOrNull() != null }
             ?: pathCandidates.firstOrNull { it.toLongOrNull() != null }
-        if (!packageName.matches(PACKAGE_NAME)) return null
+        if (!isPackageName(packageName)) return null
         return MarketAppInfo.Builder()
             .appId(id?.toLongOrNull() ?: data?.getQueryParameter("appId")?.toLongOrNull() ?: 0L)
             .packageName(packageName)
@@ -96,5 +127,8 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         val PACKAGE_NAME = Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")
+
+        fun isPackageName(value: String): Boolean =
+            value.length in 3 until 256 && value.matches(PACKAGE_NAME)
     }
 }

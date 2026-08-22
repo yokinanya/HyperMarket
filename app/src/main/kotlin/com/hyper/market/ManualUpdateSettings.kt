@@ -1,9 +1,9 @@
 package com.hyper.market
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +29,8 @@ import com.hyper.market.model.MarketAppInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 
 internal data class ManualUpdateResult(val message: String, val app: MarketAppInfo?)
 
@@ -44,7 +46,7 @@ internal fun ManualUpdateCard(apiClient: XiaomiApiClient, onInstall: (MarketAppI
         ManualInput(packageName, { packageName = it }, "包名（packageName）")
         Spacer(Modifier.height(12.dp))
         ManualInput(versionCode, { versionCode = it }, "版本号（versionCode）")
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
         FullWidthAction(if (loading) "请求中…" else "请求") {
             if (loading) return@FullWidthAction
             if (packageName.isBlank()) {
@@ -70,7 +72,7 @@ internal fun ManualUpdateCard(apiClient: XiaomiApiClient, onInstall: (MarketAppI
                 modifier = Modifier.padding(top = 12.dp),
             )
         }
-        updateApp?.let { app -> ActionPill("下载并安装") { onInstall(app) } }
+        updateApp?.let { app -> InstallActionPill(app, "下载并安装", onInstall) }
     }
 }
 
@@ -120,15 +122,15 @@ private fun ManualInput(value: String, onValueChange: (String) -> Unit, hint: St
 
 @Composable
 private fun FullWidthAction(label: String, onClick: () -> Unit) {
-    Box(
+    Button(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(32.dp))
-            .background(AccentBlue)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, color = Color.White, fontSize = 14.sp)
-    }
+            .height(43.dp),
+        cornerRadius = 32.dp,
+        minWidth = 0.dp,
+        minHeight = 43.dp,
+        colors = ButtonDefaults.buttonColorsPrimary(),
+        insideMargin = PaddingValues(0.dp),
+    ) { Text(label, color = Color.White, fontSize = 18.sp) }
 }

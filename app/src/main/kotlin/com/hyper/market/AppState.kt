@@ -15,14 +15,13 @@ data class AppSettings(
     val showPromotions: Boolean = false,
     val showComments: Boolean = false,
     val showSameDeveloper: Boolean = false,
-    val optimizeNames: Boolean = false,
+    val optimizeNames: Boolean = true,
     val xiaomiIslandOptimization: Boolean = false,
     val startPage: Int = 0,
     val installerMode: String = "标准安装",
     val customInstallerPackage: String = "",
     val noUserAction: Boolean = false,
     val saveToDownloads: Boolean = true,
-    val deleteAfterInstall: Boolean = false,
 )
 
 @Immutable
@@ -45,14 +44,13 @@ class SettingsStore(context: Context) {
         showPromotions = preferences.getBoolean(KEY_SHOW_PROMOTIONS, false),
         showComments = preferences.getBoolean(KEY_SHOW_COMMENTS, false),
         showSameDeveloper = preferences.getBoolean(KEY_SHOW_DEVELOPER, false),
-        optimizeNames = preferences.getBoolean(KEY_OPTIMIZE_NAMES, false),
+        optimizeNames = preferences.getBoolean(KEY_OPTIMIZE_NAMES, true),
         xiaomiIslandOptimization = preferences.getBoolean(KEY_ISLAND, false),
         startPage = preferences.getInt(KEY_START_PAGE, 0),
         installerMode = preferences.getString(KEY_INSTALLER_MODE, "标准安装") ?: "标准安装",
         customInstallerPackage = preferences.getString(KEY_CUSTOM_INSTALLER, "") ?: "",
         noUserAction = preferences.getBoolean(KEY_NO_USER_ACTION, false),
         saveToDownloads = preferences.getBoolean(KEY_SAVE_DOWNLOADS, true),
-        deleteAfterInstall = preferences.getBoolean(KEY_DELETE_AFTER_INSTALL, false),
     )
 
     fun write(settings: AppSettings) {
@@ -72,7 +70,6 @@ class SettingsStore(context: Context) {
             .putString(KEY_CUSTOM_INSTALLER, settings.customInstallerPackage)
             .putBoolean(KEY_NO_USER_ACTION, settings.noUserAction)
             .putBoolean(KEY_SAVE_DOWNLOADS, settings.saveToDownloads)
-            .putBoolean(KEY_DELETE_AFTER_INSTALL, settings.deleteAfterInstall)
             .apply()
     }
 
@@ -146,7 +143,6 @@ class SettingsStore(context: Context) {
         const val KEY_CUSTOM_INSTALLER = "custom_installer_package"
         const val KEY_NO_USER_ACTION = "no_user_action"
         const val KEY_SAVE_DOWNLOADS = "save_downloads"
-        const val KEY_DELETE_AFTER_INSTALL = "delete_after_install"
         const val KEY_HISTORY = "search_history"
         const val KEY_PROFILE = "market_profile"
         const val HISTORY_SEPARATOR = "\u001F"

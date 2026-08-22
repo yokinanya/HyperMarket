@@ -3,6 +3,7 @@ package com.hyper.market
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -30,10 +31,13 @@ fun IgnoredUpdatesPage(store: UpdateStore) {
     var entries by remember { mutableStateOf(store.ignoredUpdates()) }
     val permanent = entries.filter { it.permanent }
     val temporary = entries.filterNot { it.permanent }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column {
         SectionLabel("永久忽略更新")
+        Spacer(Modifier.height(6.dp))
         IgnoredGroup(permanent, store) { entries = store.ignoredUpdates() }
+        Spacer(Modifier.height(12.dp))
         SectionLabel("仅忽略本次更新")
+        Spacer(Modifier.height(6.dp))
         IgnoredGroup(temporary, store) { entries = store.ignoredUpdates() }
     }
 }

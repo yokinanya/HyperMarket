@@ -1,5 +1,6 @@
 package com.hyper.market;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
@@ -8,28 +9,60 @@ import android.content.pm.PackageManager;
 import com.hyper.market.model.InstalledPackageInfo;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 public final class PackageInventory {
     private static final String GET_INSTALLED_APPS_PERMISSION =
             "com.android.permission.GET_INSTALLED_APPS";
     private static final String XIAOMI_MARKET_PACKAGE = "com.xiaomi.market";
+    private static final String ORIGINAL_APP_PACKAGE = "com.hyper.market";
     private static final String DEFAULT_SPLITS = "0";
     private static final String DEFAULT_HASH = "0";
     private static final String DEFAULT_APK_SOURCE = "0";
+    private static final String DEFAULT_INSTALLED_BY_MARKET = "0";
+    private static final String CORE_PACKAGE = "com.miui.core";
+    private static final int ORIGINAL_PACKAGE_FLAGS = 45_568;
+    private static final long MATCH_APEX_FLAG = 1_073_741_824L;
 
     public List<InstalledPackageInfo> scan(Context context) {
         requirePackageVisibility(context);
         PackageManager packageManager = context.getPackageManager();
-        List<PackageInfo> packages = packageManager.getInstalledPackages(PackageManager.GET_META_DATA);
+        List<PackageInfo> packages = installedPackages(packageManager);
         List<InstalledPackageInfo> result = new ArrayList<>(packages.size());
         for (PackageInfo packageInfo : packages) {
-            if (context.getPackageName().equals(packageInfo.packageName)) {
+            if (context.getPackageName().equals(packageInfo.packageName)
+                    || ORIGINAL_APP_PACKAGE.equals(packageInfo.packageName)) {
                 continue;
             }
             result.add(toInstalledPackage(packageManager, packageInfo));
         }
-        return result;
+        return orderAndAugment(result);
+    }
+
+    private List<InstalledPackageInfo> orderAndAugment(List<InstalledPackageInfo> packages) {
+        LinkedHashMap<String, InstalledPackageInfo> unique = new LinkedHashMap<>();
+        packages.stream()
+                .sorted(Comparator.comparing(InstalledPackageInfo::getPackageName))
+                .forEach(item -> unique.put(item.getPackageName(), item));
+        unique.putIfAbsent(CORE_PACKAGE, new InstalledPackageInfo(
+                CORE_PACKAGE, "", 0, true, DEFAULT_INSTALLED_BY_MARKET,
+                DEFAULT_SPLITS, DEFAULT_HASH, DEFAULT_APK_SOURCE));
+        return new ArrayList<>(unique.values());
+    }
+
+    @SuppressLint("WrongConstant")
+    private List<PackageInfo> installedPackages(PackageManager packageManager) {
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            return packageManager.getInstalledPackages(
+                    PackageManager.PackageInfoFlags.of(ORIGINAL_PACKAGE_FLAGS | MATCH_APEX_FLAG));
+        }
+        int flags = ORIGINAL_PACKAGE_FLAGS;
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            flags |= (int) MATCH_APEX_FLAG;
+        }
+        return packageManager.getInstalledPackages(flags);
     }
 
     private void requirePackageVisibility(Context context) {
@@ -52,8 +85,7 @@ public final class PackageInventory {
     }
 
     private InstalledPackageInfo toInstalledPackage(
-            PackageManager packageManager,
-            PackageInfo packageInfo) {
+            PackageManager packageManager, PackageInfo packageInfo) {
         ApplicationInfo applicationInfo = packageInfo.applicationInfo;
         String installer = installerPackage(packageManager, packageInfo.packageName);
         String installedByMarket = XIAOMI_MARKET_PACKAGE.equals(installer) ? "1" : "0";
@@ -88,8 +120,23 @@ public final class PackageInventory {
         if (applicationInfo == null) {
             return false;
         }
-        return (applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0
-                || (applicationInfo.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+        int systemFlags = ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
+        if ((applicationInfo.flags & systemFlags) != 0) {
+            return true;
+        }
+        String sourceDir = applicationInfo.sourceDir;
+        if (sourceDir == null) {
+            return false;
+        }
+        String[] systemRoots = {
+                "/system/", "/system_ext/", "/product/", "/vendor/", "/odm/", "/oem/"
+        };
+        for (String root : systemRoots) {
+            if (sourceDir.startsWith(root)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String splitNames(PackageInfo packageInfo) {
@@ -97,13 +144,19 @@ public final class PackageInventory {
             return DEFAULT_SPLITS;
         }
         StringBuilder result = new StringBuilder("1:[");
+        int appended = 0;
         for (int index = 0; index < packageInfo.splitNames.length; index++) {
-            if (index > 0) {
+            String split = packageInfo.splitNames[index];
+            if (split == null || split.isEmpty()) {
+                continue;
+            }
+            if (appended > 0) {
                 result.append('#');
             }
-            result.append(packageInfo.splitNames[index]);
+            result.append(split);
+            appended++;
         }
-        return result.append(']').toString();
+        return appended == 0 ? DEFAULT_SPLITS : result.append(']').toString();
     }
 
     private String apkSource(ApplicationInfo applicationInfo) {

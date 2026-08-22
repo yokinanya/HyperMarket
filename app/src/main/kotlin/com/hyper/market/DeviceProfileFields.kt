@@ -1,5 +1,6 @@
 package com.hyper.market
 
+import android.content.Context
 import android.os.Build
 import android.util.DisplayMetrics
 import java.util.Locale
@@ -38,15 +39,19 @@ internal val DEVICE_PROFILE_FIELDS = listOf(
     DeviceProfileField("supportedIslandVersion"),
 )
 
-internal fun deviceProfileValues(metrics: DisplayMetrics): Map<String, String> = linkedMapOf(
+internal fun deviceProfileValues(context: Context, metrics: DisplayMetrics): Map<String, String> = linkedMapOf(
     "co" to Locale.getDefault().country.ifBlank { "CN" },
     "la" to Locale.getDefault().language.ifBlank { "zh" },
     "lo" to systemProperty("ro.miui.region").ifBlank { "CN" },
     "cpuArchitecture" to Build.SUPPORTED_ABIS.joinToString(","),
     "device" to Build.DEVICE,
     "model" to Build.MODEL,
-    "os" to Build.VERSION.INCREMENTAL,
-    "osV2" to Build.VERSION.INCREMENTAL,
+    "os" to systemProperty("ro.mi.os.version.incremental")
+        .ifBlank { Build.VERSION.INCREMENTAL }
+        .ifBlank { Build.VERSION.RELEASE },
+    "osV2" to systemProperty("ro.mi.os.version.incremental")
+        .ifBlank { Build.VERSION.INCREMENTAL }
+        .ifBlank { Build.VERSION.RELEASE },
     "androidVersion" to Build.VERSION.RELEASE,
     "sdk" to Build.VERSION.SDK_INT.toString(),
     "resolution" to orderedResolution(metrics.widthPixels, metrics.heightPixels),
@@ -59,11 +64,11 @@ internal fun deviceProfileValues(metrics: DisplayMetrics): Map<String, String> =
     "marketVersion" to "40008341",
     "pageConfigVersion" to "18411801",
     "webResVersion" to "3211",
-    "hybridFrameworkVersion" to "13180003",
+    "hybridFrameworkVersion" to hybridFrameworkVersion(context),
     "buildId" to Build.ID,
-    "instance_id" to UUID.randomUUID().toString(),
+    "instance_id" to instanceId(context),
     "hasGMSCore" to hasGmsCore(),
-    "supportedIslandVersion" to supportedIslandVersion(),
+    "supportedIslandVersion" to supportedIslandVersion(context),
 )
 
 internal fun presetDeviceProfile(): Map<String, String> = linkedMapOf(
@@ -75,11 +80,11 @@ internal fun presetDeviceProfile(): Map<String, String> = linkedMapOf(
     "model" to "2509FPN0BC",
     "os" to "OS3.0.315.0.WPBCNXM",
     "osV2" to "OS3.0.315.0.WPBCNXM",
-    "androidVersion" to "15",
-    "sdk" to "35",
-    "resolution" to "1080*2400",
-    "densityDpi" to "420",
-    "densityScaleFactor" to "2.625",
+    "androidVersion" to "16",
+    "sdk" to "36",
+    "resolution" to "1200*2608",
+    "densityDpi" to "480",
+    "densityScaleFactor" to "3.0",
     "miuiBigVersionCode" to "816",
     "miuiBigVersionName" to "V816",
     "osBigVersionCode" to "3",
@@ -87,17 +92,21 @@ internal fun presetDeviceProfile(): Map<String, String> = linkedMapOf(
     "marketVersion" to "40008341",
     "pageConfigVersion" to "18411801",
     "webResVersion" to "3211",
-    "hybridFrameworkVersion" to "13180003",
+    "hybridFrameworkVersion" to "13170201",
     "buildId" to "BP2A.250605.031.A3",
     "instance_id" to UUID.randomUUID().toString(),
     "hasGMSCore" to "true",
     "supportedIslandVersion" to "3",
 )
 
-internal fun effectiveDeviceProfile(profile: MarketProfileSettings, metrics: DisplayMetrics): Map<String, String> {
+internal fun effectiveDeviceProfile(
+    profile: MarketProfileSettings,
+    context: Context,
+    metrics: DisplayMetrics,
+): Map<String, String> {
     val base = when (profile.source) {
         "preset" -> presetDeviceProfile()
-        else -> deviceProfileValues(metrics)
+        else -> deviceProfileValues(context, metrics)
     }.toMutableMap()
     if (profile.source == "custom") base.putAll(profile.overrides)
     return base
@@ -113,4 +122,24 @@ private fun systemProperty(key: String): String = runCatching {
 
 private fun hasGmsCore(): String = systemProperty("ro.miui.has_gmscore").let { it == "1" }.toString()
 
-private fun supportedIslandVersion(): String = "3"
+private fun supportedIslandVersion(context: Context): String {
+    val protocol = android.provider.Settings.System.getString(
+        context.contentResolver, "notification_focus_protocol",
+    )
+    return if (protocol == "2" || protocol == "3") protocol else "1"
+}
+
+private fun hybridFrameworkVersion(context: Context): String = runCatching {
+    val packageInfo = context.packageManager.getPackageInfo("com.miui.hybrid", 0)
+    if (Build.VERSION.SDK_INT >= 28) packageInfo.longVersionCode.toString()
+    else packageInfo.versionCode.toString()
+}.getOrDefault("")
+
+private fun instanceId(context: Context): String {
+    val preferences = context.getSharedPreferences("market_settings", Context.MODE_PRIVATE)
+    val stored = preferences.getString("market_instance_id", "").orEmpty()
+    if (stored.isNotBlank()) return stored
+    val generated = UUID.randomUUID().toString()
+    preferences.edit().putString("market_instance_id", generated).apply()
+    return generated
+}

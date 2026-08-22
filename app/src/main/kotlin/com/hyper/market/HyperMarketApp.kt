@@ -2,6 +2,7 @@ package com.hyper.market
 
 import android.app.Activity
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -16,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import android.widget.Toast
@@ -44,6 +48,11 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Update
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
+private fun settingsDestinationForRoute(route: String): SettingsDestination? =
+    SettingsDestination.values().firstOrNull { destination ->
+        route == "settings-${destination.name.lowercase()}"
+    }
+
 @Composable
 fun HyperMarketApp(
     apiClient: XiaomiApiClient,
@@ -56,16 +65,26 @@ fun HyperMarketApp(
     val updateStore = remember(context) { UpdateStore(context) }
     var profile by remember { androidx.compose.runtime.mutableStateOf(settingsStore.readMarketProfile()) }
     var settings by remember { androidx.compose.runtime.mutableStateOf(settingsStore.read()) }
+    val searchSession = remember { SearchSessionState(settingsStore.readSearchHistory()) }
     var selectedTab by rememberSaveable { mutableIntStateOf(settings.startPage) }
     var detailApp by remember { androidx.compose.runtime.mutableStateOf<MarketAppInfo?>(null) }
+    var displayedDetailApp by remember { androidx.compose.runtime.mutableStateOf(initialDetail) }
     var todayArticleId by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var displayedArticleId by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     var settingsDestination by remember { androidx.compose.runtime.mutableStateOf<SettingsDestination?>(null) }
+    val searchListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+    val settingsScrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
     var operation by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     var showLaunchDialog by remember { androidx.compose.runtime.mutableStateOf(LaunchDialogHelper.shouldShow(context)) }
 
     LaunchedEffect(profile) { apiClient.setProfile(profile.source, profile.overrides) }
 
-    LaunchedEffect(initialDetail) { if (initialDetail != null) detailApp = initialDetail }
+    LaunchedEffect(initialDetail) {
+        if (initialDetail != null) {
+            detailApp = initialDetail
+            displayedDetailApp = initialDetail
+        }
+    }
     BackHandler(enabled = detailApp != null || todayArticleId != null || settingsDestination != null) {
         when {
             detailApp != null -> detailApp = null
@@ -85,6 +104,16 @@ fun HyperMarketApp(
         apiClient.setProfile(value.source, value.overrides)
     }
 
+    fun openDetail(app: MarketAppInfo) {
+        displayedDetailApp = app
+        detailApp = app
+    }
+
+    fun openArticle(resourceId: String) {
+        displayedArticleId = resourceId
+        todayArticleId = resourceId
+    }
+
     fun install(app: MarketAppInfo) {
         if (operation != null) return
         if (settings.installerMode == "标准安装" &&
@@ -97,7 +126,6 @@ fun HyperMarketApp(
         }
         try {
             DownloadService.start(context, listOf(app), settings, profile.source, profile.overrides)
-            operation = "已提交后台任务：${app.getDisplayName()}"
         } catch (exception: Exception) {
             operation = exception.message ?: "下载失败"
         }
@@ -115,7 +143,6 @@ fun HyperMarketApp(
         }
         try {
             DownloadService.start(context, apps, settings, profile.source, profile.overrides)
-            operation = "全部更新已提交到后台"
         } catch (exception: Exception) {
             operation = exception.message ?: "更新失败"
         }
@@ -163,20 +190,30 @@ fun HyperMarketApp(
     val route = when {
         detailApp != null -> "detail"
         todayArticleId != null -> "today-article"
-        settingsDestination != null -> "settings-subpage"
+        settingsDestination != null -> "settings-${settingsDestination!!.name.lowercase()}"
         else -> "tab-$selectedTab"
     }
     val isAboutPage = settingsDestination == SettingsDestination.ABOUT
+    val isArticlePage = todayArticleId != null
+    val aboutBackgroundAlpha by animateFloatAsState(
+        targetValue = if (isAboutPage) 1f else 0f,
+        animationSpec = tween(320),
+        label = "about-background-alpha",
+    )
     val view = LocalView.current
     SideEffect {
         val window = (view.context as? Activity)?.window ?: return@SideEffect
-        val surfaceColor = if (isAboutPage) {
+        val surfaceColor = if (isAboutPage || isArticlePage) {
             android.graphics.Color.TRANSPARENT
         } else {
             android.graphics.Color.rgb(247, 247, 247)
         }
         window.statusBarColor = surfaceColor
-        window.navigationBarColor = surfaceColor
+        window.navigationBarColor = if (isArticlePage) {
+            android.graphics.Color.WHITE
+        } else {
+            surfaceColor
+        }
         if (android.os.Build.VERSION.SDK_INT >= 29) {
             window.isNavigationBarContrastEnforced = !isAboutPage
         }
@@ -188,44 +225,56 @@ fun HyperMarketApp(
         Box(
             modifier = Modifier.fillMaxSize(),
         ) {
-            if (isAboutPage) {
-                AboutGradientBackground(Modifier.fillMaxSize())
+            if (aboutBackgroundAlpha > 0f) {
+                AboutGradientBackground(
+                    Modifier.fillMaxSize().graphicsLayer { alpha = aboutBackgroundAlpha },
+                )
             }
             Scaffold(
-                containerColor = if (isAboutPage) Color.Transparent else Color(0xFFF7F7F7),
+                containerColor = if (isAboutPage || isArticlePage) {
+                    Color.Transparent
+                } else {
+                    Color(0xFFF7F7F7)
+                },
                 bottomBar = {
                     if (detailApp == null && todayArticleId == null && settingsDestination == null) {
                         MarketNavigation(selectedTab) { selectedTab = it }
                     }
                 },
             ) { paddingValues ->
-                Box(Modifier.fillMaxSize().padding(paddingValues)) {
+                val pageModifier = if (isAboutPage || isArticlePage) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier.fillMaxSize().padding(paddingValues)
+                }
+                Box(pageModifier) {
                     AnimatedContent(
                         targetState = route,
                         transitionSpec = { routeTransition() },
                         label = "route-transition",
                     ) { currentRoute ->
                         when {
-                            currentRoute == "detail" -> detailApp?.let {
+                            currentRoute == "detail" -> displayedDetailApp?.let {
                                 DetailPage(
                                     app = it,
                                     apiClient = apiClient,
                                     settings = settings,
+                                    packageVisibilityRefresh = packageVisibilityRefresh,
                                     onInstall = ::install,
                                     onOpenInstalled = ::openInstalled,
-                                    onOpenDetail = { detailApp = it },
+                                    onOpenDetail = ::openDetail,
                                     onBack = { detailApp = null },
                                 )
                             }
-                            currentRoute == "today-article" -> todayArticleId?.let {
+                            currentRoute == "today-article" -> displayedArticleId?.let {
                                 TodayArticlePage(
                                     resourceId = it,
                                     apiClient = apiClient,
-                                    onOpenDetail = { detailApp = it },
+                                    onOpenDetail = ::openDetail,
                                     onBack = { todayArticleId = null },
                                 )
                             }
-                            currentRoute == "settings-subpage" -> settingsDestination?.let {
+                            currentRoute.startsWith("settings-") -> settingsDestinationForRoute(currentRoute)?.let {
                                 SettingsSubpage(
                                     it,
                                     settings,
@@ -243,12 +292,16 @@ fun HyperMarketApp(
                             }
                             else -> MainPage(
                                 selectedTab,
+                                searchSession,
+                                searchListState,
+                                settingsScrollState,
                                 apiClient,
                                 settings,
                                 updateStore,
                                 packageVisibilityRefresh,
-                                onOpenDetail = { detailApp = it },
-                                onOpenArticle = { todayArticleId = it },
+                                onOpenDetail = ::openDetail,
+                                onOpenArticle = ::openArticle,
+                                onOpenUpdates = { selectedTab = 1 },
                                 onInstall = ::install,
                                 onInstallAll = ::installAll,
                                 onOpenSettings = { settingsDestination = it },
@@ -276,4 +329,5 @@ fun HyperMarketApp(
             },
         )
     }
+    InstallResultDialog()
 }
