@@ -34,6 +34,29 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * 今日页内存缓存：Tab 切回时避免重新请求网络与重建列表尖峰。
+ * 页面离开 Pager 视口后组合会被销毁，remember 状态丢失；缓存保证切回即时渲染。
+ */
+internal object TodayFeedCache {
+    @Volatile var items: List<TodayFeaturedItem> = emptyList()
+    @Volatile var hasMore: Boolean = false
+    @Volatile var page: Int = 0
+    @Volatile var loadedAt: Long = 0L
+
+    fun isUsable(now: Long = System.currentTimeMillis()): Boolean =
+        items.isNotEmpty() && now - loadedAt < TODAY_CACHE_MAX_AGE_MS
+
+    fun store(items: List<TodayFeaturedItem>, hasMore: Boolean, page: Int) {
+        this.items = items
+        this.hasMore = hasMore
+        this.page = page
+        loadedAt = System.currentTimeMillis()
+    }
+
+    private const val TODAY_CACHE_MAX_AGE_MS = 10 * 60 * 1000L
+}
+
 @Composable
 fun TodayPage(
     settings: AppSettings,
@@ -45,12 +68,12 @@ fun TodayPage(
     onOpenUpdates: () -> Unit,
 ) {
     val context = LocalContext.current
-    var items by remember { mutableStateOf<List<TodayFeaturedItem>>(emptyList()) }
+    var items by remember { mutableStateOf(TodayFeedCache.items) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
-    var page by remember { mutableIntStateOf(0) }
-    var hasMore by remember { mutableStateOf(false) }
+    var page by remember { mutableIntStateOf(TodayFeedCache.page) }
+    var hasMore by remember { mutableStateOf(TodayFeedCache.hasMore) }
     var loadingMore by remember { mutableStateOf(false) }
     var loadMoreError by remember { mutableStateOf<String?>(null) }
     var updatesState by remember {
@@ -65,10 +88,18 @@ fun TodayPage(
         page = 0
         hasMore = false
         loadMoreError = null
+        if (refreshKey == 0 && TodayFeedCache.isUsable()) {
+            items = TodayFeedCache.items
+            hasMore = TodayFeedCache.hasMore
+            page = TodayFeedCache.page
+            loading = false
+            return@LaunchedEffect
+        }
         try {
             val firstPage = withContext(Dispatchers.IO) { apiClient.loadToday(0) }
             items = firstPage.items
             hasMore = firstPage.hasMore()
+            TodayFeedCache.store(firstPage.items, firstPage.hasMore(), 0)
         } catch (exception: Exception) {
             error = exception.message ?: "今日内容加载失败"
         } finally {
@@ -142,6 +173,7 @@ fun TodayPage(
                                         .map { it.second }
                                     page += 1
                                     hasMore = nextPage.hasMore()
+                                    TodayFeedCache.store(items, hasMore, page)
                                 } catch (exception: Exception) {
                                     loadMoreError = exception.message ?: "更多今日内容加载失败"
                                 } finally {

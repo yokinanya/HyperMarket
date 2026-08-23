@@ -146,43 +146,24 @@ fun SavedPackagesPage(
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "${entries.size} 个安装包 · 共 ${formatFileSize(entries.sumOf { it.size })}",
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(start = 4.dp),
+        )
         entries.forEach { entry ->
-            Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 24.dp) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RemoteAppIcon(
-                        entry.iconUrl,
-                        entry.displayName,
-                        Modifier.size(58.dp).padding(end = 14.dp),
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(entry.displayName, fontSize = 20.sp)
-                        Text(
-                            "${entry.versionName} · ${formatFileSize(entry.size)}" +
-                                if (entry.artifacts.size > 1) " · ${entry.artifacts.size} 个文件" else "",
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        )
-                        Text(
-                            entry.fileName,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            fontSize = 14.sp,
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ActionPill("点击打开") { onOpen(entry) }
-                        ActionPill("重新下载") { onReinstall(entry) }
-                        ActionPill("删除") { pendingDelete = entry }
-                    }
-                }
-            }
+            SavedPackageCard(
+                entry = entry,
+                onOpen = { onOpen(entry) },
+                onDelete = { pendingDelete = entry },
+            )
         }
     }
     pendingDelete?.let { entry ->
         ConfirmDialog(
             title = "删除保存的安装包？",
-            message = entry.path,
+            message = "${entry.displayName} 的安装包将从设备中移除",
             onDismiss = { pendingDelete = null },
             onConfirm = {
                 store.deleteSavedPackage(entry)
@@ -190,6 +171,49 @@ fun SavedPackagesPage(
                 pendingDelete = null
             },
         )
+    }
+}
+
+@Composable
+private fun SavedPackageCard(
+    entry: SavedPackageEntry,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 24.dp) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RemoteAppIcon(
+                entry.iconUrl,
+                entry.displayName,
+                Modifier.size(58.dp).padding(end = 14.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(entry.displayName, fontSize = 17.sp, maxLines = 1)
+                Text(
+                    "${entry.versionName} · ${formatFileSize(entry.size)}" +
+                        if (entry.artifacts.size > 1) " · ${entry.artifacts.size} 个文件" else "",
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                )
+                Text(
+                    "保存于 ${formatTimestamp(entry.savedAt)}",
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ActionPill("安装", primary = true, onClick = onOpen)
+                ActionPill("删除", primary = false, onClick = onDelete)
+            }
+        }
     }
 }
 

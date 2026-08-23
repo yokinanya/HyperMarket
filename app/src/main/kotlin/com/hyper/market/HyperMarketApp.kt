@@ -172,6 +172,28 @@ fun HyperMarketApp(
         settingsDestination != null -> "settings-${settingsDestination!!.name.lowercase()}"
         else -> "tabs"
     }
+    // 稳定化所有回调：避免 HyperMarketContentState 每次重建时 lambda 全部变为新实例，
+    // 导致 Tab 内容无法跳过重组（性能：UI 线程组合风暴）。
+    val stableOnSelectedTab = remember { { value: Int -> selectedTab = value } }
+    val stableOnOpenDetail = remember { { app: MarketAppInfo -> openDetail(app) } }
+    val stableOnOpenArticle = remember { { id: String -> openArticle(id) } }
+    val stableOnInstall = remember { { app: MarketAppInfo -> install(app) } }
+    val stableOnInstallAll = remember { { apps: List<MarketAppInfo> -> installAll(apps) } }
+    val stableOnOpenInstalled = remember { { app: MarketAppInfo -> openInstalled(app) } }
+    val stableOnOpenSaved = remember { { entry: SavedPackageEntry -> openSaved(entry) } }
+    val stableOnReinstallSaved = remember { { entry: SavedPackageEntry -> reinstallSaved(entry) } }
+    val stableOnSettingsChange = remember { { value: AppSettings -> updateSettings(value) } }
+    val stableOnProfileChange = remember { { value: MarketProfileSettings -> updateProfile(value) } }
+    val stableOnOpenSettings = remember { { destination: SettingsDestination -> settingsDestination = destination } }
+    val stableOnBack = remember {
+        {
+            when {
+                detailApp != null -> detailApp = null
+                todayArticleId != null -> todayArticleId = null
+                else -> settingsDestination = null
+            }
+        }
+    }
     val isAboutPage = settingsDestination == SettingsDestination.ABOUT
     val isArticlePage = todayArticleId != null
     val animationsEnabled = systemAnimationsEnabled()
@@ -233,24 +255,18 @@ fun HyperMarketApp(
                                 updateStore = updateStore,
                                 packageVisibilityRefresh = packageVisibilityRefresh,
                                 animationsEnabled = animationsEnabled,
-                                onSelectedTab = { selectedTab = it },
-                                onOpenDetail = ::openDetail,
-                                onOpenArticle = ::openArticle,
-                                onInstall = ::install,
-                                onInstallAll = ::installAll,
-                                onOpenInstalled = ::openInstalled,
-                                onOpenSaved = ::openSaved,
-                                onReinstallSaved = ::reinstallSaved,
-                                onSettingsChange = ::updateSettings,
-                                onProfileChange = ::updateProfile,
-                                onOpenSettings = { settingsDestination = it },
-                                onBack = {
-                                    when {
-                                        detailApp != null -> detailApp = null
-                                        todayArticleId != null -> todayArticleId = null
-                                        else -> settingsDestination = null
-                                    }
-                                },
+                                onSelectedTab = stableOnSelectedTab,
+                                onOpenDetail = stableOnOpenDetail,
+                                onOpenArticle = stableOnOpenArticle,
+                                onInstall = stableOnInstall,
+                                onInstallAll = stableOnInstallAll,
+                                onOpenInstalled = stableOnOpenInstalled,
+                                onOpenSaved = stableOnOpenSaved,
+                                onReinstallSaved = stableOnReinstallSaved,
+                                onSettingsChange = stableOnSettingsChange,
+                                onProfileChange = stableOnProfileChange,
+                                onOpenSettings = stableOnOpenSettings,
+                                onBack = stableOnBack,
                             ),
                         )
                     }

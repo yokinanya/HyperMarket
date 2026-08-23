@@ -39,7 +39,7 @@ internal fun UpdateHeader(
     onInstallAll: (List<MarketAppInfo>) -> Unit,
 ) {
     if (updates.isEmpty()) return
-    Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 32.dp) {
+    Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 16.dp) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,

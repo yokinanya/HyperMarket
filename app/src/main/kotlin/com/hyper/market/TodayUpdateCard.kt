@@ -68,4 +68,4 @@ private fun todayUpdateTextStyle(fontSize: androidx.compose.ui.unit.TextUnit, li
         platformStyle = PlatformTextStyle(includeFontPadding = false),
     )
 
-private val TODAY_UPDATE_CARD_RADIUS = 32.dp
+private val TODAY_UPDATE_CARD_RADIUS = 16.dp
