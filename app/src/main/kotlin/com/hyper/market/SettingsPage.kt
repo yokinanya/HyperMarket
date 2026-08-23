@@ -1,25 +1,21 @@
 package com.hyper.market
 
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -28,17 +24,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.DropdownArrowEndAction
-import top.yukonga.miuix.kmp.basic.Switch
-
-private val SETTINGS_SPINNER_OFFSET_X = 19.dp
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 @Composable
 fun SettingsPage(
@@ -53,7 +44,7 @@ fun SettingsPage(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 12.dp, vertical = 38.dp),
+                .padding(start = 12.dp, top = 38.dp, end = 12.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             PageTitle("设置")
@@ -84,7 +75,12 @@ fun SettingsPage(
             enter = fadeIn(tween(180)),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            Text("设置", color = Color(0xFF111111), fontSize = 26.sp, modifier = Modifier.padding(top = 10.dp))
+            Text(
+                "设置",
+                color = MiuixTheme.colorScheme.onBackground,
+                fontSize = 26.sp,
+                modifier = Modifier.padding(top = 10.dp),
+            )
         }
     }
 }
@@ -179,8 +175,7 @@ private fun GeneralSettings(
 @Composable
 private fun SettingCard(content: @Composable () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().animateContentSize(tween(240)),
-        cornerRadius = 32.dp,
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Column { content() }
     }
@@ -188,16 +183,12 @@ private fun SettingCard(content: @Composable () -> Unit) {
 
 @Composable
 private fun SettingSwitchRow(title: String, summary: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onChecked(!checked) }
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SettingText(title, summary)
-        Switch(checked = checked, onCheckedChange = onChecked)
-    }
+    SwitchPreference(
+        checked = checked,
+        onCheckedChange = onChecked,
+        title = title,
+        summary = summary,
+    )
 }
 
 @Composable
@@ -207,79 +198,20 @@ private fun SettingLinkRow(destination: SettingsDestination, onOpen: (SettingsDe
 
 @Composable
 private fun SettingLinkRow(title: String, summary: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SettingText(title, summary)
-        SettingChevron()
-    }
+    ArrowPreference(title = title, summary = summary, onClick = onClick)
 }
 
 @Composable
 private fun SettingHomeRow(startPage: Int, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(73.dp)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("首页", fontSize = 17.sp, color = Color(0xFF202020))
-            Text("启动时打开的页面", fontSize = 14.sp, color = Color(0xFF8A8A8A))
-        }
-        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.CenterStart) {
-            Text(
-                when (startPage) {
-                    1 -> "更新"
-                    2 -> "搜索"
-                    else -> "今日"
-                },
-                fontSize = 14.sp,
-                color = Color(0xFFAAAAAA),
-                modifier = Modifier.offset(x = 3.dp),
-            )
-            HomeSpinnerIcon()
-        }
+    val value = when (startPage) {
+        1 -> "更新"
+        2 -> "搜索"
+        else -> "今日"
     }
-}
-
-@Composable
-private fun HomeSpinnerIcon() {
-    Box(
-        modifier = Modifier.size(48.dp).offset(x = SETTINGS_SPINNER_OFFSET_X),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            DropdownArrowEndAction(actionColor = Color(0xFFAAAAAA))
-        }
-    }
-}
-
-@Composable
-private fun SettingChevron() {
-    Canvas(modifier = Modifier.size(24.dp)) {
-        val path = Path().apply {
-            moveTo(size.width * 0.58f, size.height * 0.16f)
-            lineTo(size.width * 0.9f, size.height * 0.5f)
-            lineTo(size.width * 0.58f, size.height * 0.84f)
-        }
-        drawPath(
-            path = path,
-            color = Color(0xFFAAAAAA),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(
-                width = 2.5.dp.toPx(),
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round,
-            ),
-        )
-    }
+    ArrowPreference(
+        title = "首页",
+        summary = "启动时打开的页面",
+        endActions = { Text(value) },
+        onClick = onClick,
+    )
 }

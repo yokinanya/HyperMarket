@@ -1,36 +1,80 @@
 apply plugin: "com.android.application"
-apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "org.jetbrains.kotlin.plugin.compose"
 
+def releaseSigningFile = rootProject.file("key.properties")
+def releaseSigningProperties = new Properties()
+if (releaseSigningFile.isFile()) {
+    releaseSigningFile.withInputStream { releaseSigningProperties.load(it) }
+}
+def requiredSigningKeys = ["storeFile", "storePassword", "keyAlias", "keyPassword"]
+
 android {
-    namespace "com.hyper.market"
-    compileSdk 37
+    namespace = "com.hyper.market"
+    compileSdk = 37
+    compileSdkMinor = 0
 
     defaultConfig {
-        applicationId "org.hyper.market"
-        minSdk 26
-        targetSdk 37
-        versionCode 1
-        versionName "4.120.1-rebuilt"
+        applicationId = "org.hyper.market"
+        minSdk = 26
+        targetSdk = 37
+        versionCode = 412001
+        versionName = "4.120.1-rebuilt"
+    }
+
+    signingConfigs {
+        release {
+            if (requiredSigningKeys.every { releaseSigningProperties.getProperty(it) }) {
+                storeFile = rootProject.file(releaseSigningProperties.getProperty("storeFile"))
+                storePassword = releaseSigningProperties.getProperty("storePassword")
+                keyAlias = releaseSigningProperties.getProperty("keyAlias")
+                keyPassword = releaseSigningProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         debug {
-            versionNameSuffix "-debug"
+            versionNameSuffix = "-debug"
         }
         release {
-            minifyEnabled false
+            signingConfig = signingConfigs.release
+            minifyEnabled = true
+            shrinkResources = true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildFeatures {
-        compose true
+        compose = true
+    }
+}
+
+tasks.register("verifyReleaseSigningProperties") {
+    doLast {
+        if (!releaseSigningFile.isFile()) {
+            throw new GradleException("Release signing requires key.properties")
+        }
+        def missing = requiredSigningKeys.findAll {
+            !releaseSigningProperties.getProperty(it)
+        }
+        if (!missing.isEmpty()) {
+            throw new GradleException("Missing release signing properties: ${missing.join(', ')}")
+        }
+        def configuredStore = rootProject.file(releaseSigningProperties.getProperty("storeFile"))
+        if (!configuredStore.isFile()) {
+            throw new GradleException("Release signing storeFile does not exist")
+        }
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name == "preReleaseBuild") {
+        task.dependsOn tasks.named("verifyReleaseSigningProperties")
     }
 }
 
@@ -41,8 +85,8 @@ dependencies {
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
     implementation "io.ktor:ktor-client-core:3.5.1"
     implementation "io.ktor:ktor-client-cio:3.5.1"
-    implementation "org.jetbrains.compose.material3:material3:1.9.0"
     implementation "top.yukonga.miuix.kmp:miuix-ui:0.9.3"
+    implementation "top.yukonga.miuix.kmp:miuix-preference:0.9.3"
     implementation "top.yukonga.miuix.kmp:miuix-icons:0.9.3"
     implementation "io.coil-kt.coil3:coil-compose:3.5.0"
     implementation "io.coil-kt.coil3:coil-network-okhttp:3.5.0"

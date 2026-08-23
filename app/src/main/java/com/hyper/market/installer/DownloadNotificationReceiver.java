@@ -19,10 +19,15 @@ public final class DownloadNotificationReceiver extends BroadcastReceiver {
             DownloadTaskRegistry.applyCurrent(action);
             if (ACTION_PAUSE.equals(action)) {
                 com.hyper.market.InstallUiStateStore.pauseCurrent();
+                com.hyper.market.DownloadService.Companion.setProgressNotificationVisible(
+                        context, false);
             } else if (ACTION_RESUME.equals(action)) {
                 com.hyper.market.InstallUiStateStore.resumeCurrent();
+                com.hyper.market.DownloadService.Companion.setProgressNotificationVisible(
+                        context, true);
+            } else {
+                DownloadNotification.cancelOngoing(context);
             }
-            DownloadNotification.refresh(context);
             return;
         }
         if (!DownloadTaskStore.hasTask(context)) {

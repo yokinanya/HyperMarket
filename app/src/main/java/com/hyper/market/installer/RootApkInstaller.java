@@ -7,7 +7,8 @@ import java.io.InputStream;
 import java.util.List;
 
 public final class RootApkInstaller {
-    private static final String INSTALL = "pm install -r --user 0 ";
+    private static final String INSTALL = "pm install -r --user 0 -i "
+            + InstallerIdentity.XIAOMI_MARKET_PACKAGE + " ";
 
     public void install(List<File> files) throws IOException {
         Process process = new ProcessBuilder("su", "-c", command(files))
@@ -25,7 +26,7 @@ public final class RootApkInstaller {
         }
     }
 
-    private String command(List<File> files) throws IOException {
+    String command(List<File> files) throws IOException {
         if (files.isEmpty()) throw new IOException("没有可安装的 APK");
         StringBuilder command = new StringBuilder(INSTALL);
         for (File file : files) {

@@ -30,7 +30,6 @@ import top.yukonga.miuix.kmp.icon.basic.Check
 
 private val SOURCE_DIALOG_X_OFFSET = (-28.2).dp
 private val SOURCE_DIALOG_Y_OFFSET = 156.5.dp
-private val SOURCE_SELECTED_COLOR = Color(0xFF347FF5)
 private const val SOURCE_DIALOG_DIM_AMOUNT = 0.3f
 private val SOURCE_OPTIONS = listOf(
     "custom" to "自定义",
@@ -103,7 +102,7 @@ private fun SourceOptionRow(
             Image(
                 imageVector = MiuixIcons.Basic.Check,
                 contentDescription = null,
-                colorFilter = ColorFilter.tint(SOURCE_SELECTED_COLOR),
+                colorFilter = ColorFilter.tint(top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.primary),
                 modifier = Modifier.align(Alignment.CenterEnd)
                     .offset(x = (-20.2).dp, y = (-3.8).dp)
                     .size(20.dp),

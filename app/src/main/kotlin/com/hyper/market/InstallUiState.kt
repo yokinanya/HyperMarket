@@ -2,6 +2,7 @@ package com.hyper.market
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,7 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -22,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -32,9 +32,13 @@ import com.hyper.market.installer.DownloadNotificationReceiver
 import com.hyper.market.installer.DownloadTaskRegistry
 import com.hyper.market.model.MarketAppInfo
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.window.WindowDialog
@@ -61,6 +65,9 @@ object InstallUiStateStore {
     private val mutableStates = MutableStateFlow<Map<String, InstallUiState>>(emptyMap())
     val states: StateFlow<Map<String, InstallUiState>> = mutableStates.asStateFlow()
     private var activePackage: String? = null
+
+    fun observe(packageName: String): Flow<InstallUiState?> =
+        states.map { current -> current[packageName] }.distinctUntilChanged()
 
     @JvmStatic
     @Synchronized
@@ -98,11 +105,21 @@ object InstallUiStateStore {
 
     @JvmStatic
     @Synchronized
-    fun pauseCurrent() = activePackage?.let { update(it, InstallPhase.PAUSED) }
+    fun pauseCurrent() = updateActiveDownloads(InstallPhase.PAUSED)
 
     @JvmStatic
     @Synchronized
-    fun resumeCurrent() = activePackage?.let { update(it, InstallPhase.DOWNLOADING) }
+    fun resumeCurrent() = updateActiveDownloads(InstallPhase.DOWNLOADING)
+
+    private fun updateActiveDownloads(phase: InstallPhase) {
+        mutableStates.value = mutableStates.value.mapValues { (_, state) ->
+            if (state.phase == InstallPhase.DOWNLOADING || state.phase == InstallPhase.PAUSED) {
+                state.copy(phase = phase)
+            } else {
+                state
+            }
+        }
+    }
 
     @Synchronized
     private fun update(packageName: String, phase: InstallPhase, progress: Int? = null) {
@@ -147,18 +164,21 @@ internal fun InstallActionPill(
     idleLabel: String,
     onInstall: (MarketAppInfo) -> Unit,
 ) {
-    val states by InstallUiStateStore.states.collectAsState()
-    val state = states[app.packageName]
-    if (state?.phase?.isActive() == true) {
-        InstallProgressPill(state) { handleInstallClick(state, app, onInstall) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val stateFlow = androidx.compose.runtime.remember(app.packageName) {
+        InstallUiStateStore.observe(app.packageName)
+    }
+    val state by stateFlow.collectAsState(initial = null)
+    val activeState = state
+    if (activeState?.phase?.isActive() == true) {
+        InstallProgressPill(activeState) { handleInstallClick(context, activeState, app, onInstall) }
         return
     }
     Button(
-        onClick = { handleInstallClick(state, app, onInstall) },
-        modifier = Modifier.width(InstallPillWidth),
+        onClick = { handleInstallClick(context, state, app, onInstall) },
         cornerRadius = 28.dp,
         minWidth = 0.dp,
-        minHeight = 32.dp,
+        minHeight = 34.dp,
         colors = ButtonDefaults.buttonColorsPrimary(),
         insideMargin = PaddingValues(horizontal = 16.dp, vertical = 7.dp),
     ) {
@@ -166,7 +186,7 @@ internal fun InstallActionPill(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(state?.label(idleLabel) ?: idleLabel, color = Color.White, style = installLabelStyle)
+            Text(state?.label(idleLabel) ?: idleLabel, style = installLabelStyle)
         }
     }
 }
@@ -175,12 +195,13 @@ internal fun InstallActionPill(
 private fun InstallProgressPill(state: InstallUiState, onClick: () -> Unit) {
     val label = state.label("")
     val target = state.fillProgress()
-    val progress by animateFloatAsState(target, tween(300), label = "download-fill")
+    val animationSpec = if (systemAnimationsEnabled()) tween<Float>(300) else snap()
+    val progress by animateFloatAsState(target, animationSpec, label = "download-fill")
     val enabled = state.phase == InstallPhase.DOWNLOADING || state.phase == InstallPhase.PAUSED
     BoxWithConstraints(
         modifier = Modifier.width(InstallPillWidth).height(32.dp)
             .clip(RoundedCornerShape(28.dp))
-            .background(Color(0xFFECECEC))
+            .background(MiuixTheme.colorScheme.secondaryContainer)
             .clickable(enabled = enabled, onClick = onClick),
     ) {
         Box(
@@ -189,11 +210,10 @@ private fun InstallProgressPill(state: InstallUiState, onClick: () -> Unit) {
                 .fillMaxHeight()
                 .width(maxWidth * progress)
                 .clipToBounds()
-                .background(AccentBlue),
+                .background(MiuixTheme.colorScheme.primary),
         )
         Text(
             label,
-            color = Color.White,
             style = installLabelStyle,
             textAlign = TextAlign.Center,
             modifier = Modifier.align(Alignment.Center).fillMaxWidth(),
@@ -202,6 +222,7 @@ private fun InstallProgressPill(state: InstallUiState, onClick: () -> Unit) {
 }
 
 private fun handleInstallClick(
+    context: android.content.Context,
     state: InstallUiState?,
     app: MarketAppInfo,
     onInstall: (MarketAppInfo) -> Unit,
@@ -210,10 +231,12 @@ private fun handleInstallClick(
         InstallPhase.DOWNLOADING -> {
             DownloadTaskRegistry.applyCurrent(DownloadNotificationReceiver.ACTION_PAUSE)
             InstallUiStateStore.pauseCurrent()
+            DownloadService.setProgressNotificationVisible(context, false)
         }
         InstallPhase.PAUSED -> {
             DownloadTaskRegistry.applyCurrent(DownloadNotificationReceiver.ACTION_RESUME)
             InstallUiStateStore.resumeCurrent()
+            DownloadService.setProgressNotificationVisible(context, true)
         }
         else -> onInstall(app)
     }
@@ -252,7 +275,6 @@ private val ACTIVE_PHASES = setOf(
     InstallPhase.AWAITING_USER_ACTION,
 )
 private val InstallPillWidth = 88.dp
-private val TERMINAL_PHASES = setOf(InstallPhase.COMPLETE, InstallPhase.FAILED)
 private val installLabelStyle = TextStyle(
     fontSize = 14.sp,
     lineHeight = 16.sp,

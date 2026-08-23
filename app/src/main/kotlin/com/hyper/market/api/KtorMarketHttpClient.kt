@@ -21,7 +21,7 @@ import kotlinx.coroutines.runBlocking
 internal object KtorMarketHttpClient {
     private val stripDefaultHeaders = createClientPlugin("StripDefaultHeaders") {
         onRequest { request, _ ->
-            request.headers.remove(HttpHeaders.AcceptCharset)
+            request.headers.remove("Accept-Charset")
             request.headers.remove(HttpHeaders.Accept)
         }
     }

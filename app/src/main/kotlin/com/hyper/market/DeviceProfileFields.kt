@@ -3,6 +3,8 @@ package com.hyper.market
 import android.content.Context
 import android.os.Build
 import android.util.DisplayMetrics
+import androidx.core.content.edit
+import androidx.core.content.pm.PackageInfoCompat
 import java.util.Locale
 import java.util.UUID
 
@@ -131,8 +133,7 @@ private fun supportedIslandVersion(context: Context): String {
 
 private fun hybridFrameworkVersion(context: Context): String = runCatching {
     val packageInfo = context.packageManager.getPackageInfo("com.miui.hybrid", 0)
-    if (Build.VERSION.SDK_INT >= 28) packageInfo.longVersionCode.toString()
-    else packageInfo.versionCode.toString()
+    PackageInfoCompat.getLongVersionCode(packageInfo).toString()
 }.getOrDefault("")
 
 private fun instanceId(context: Context): String {
@@ -140,6 +141,6 @@ private fun instanceId(context: Context): String {
     val stored = preferences.getString("market_instance_id", "").orEmpty()
     if (stored.isNotBlank()) return stored
     val generated = UUID.randomUUID().toString()
-    preferences.edit().putString("market_instance_id", generated).apply()
+    preferences.edit { putString("market_instance_id", generated) }
     return generated
 }

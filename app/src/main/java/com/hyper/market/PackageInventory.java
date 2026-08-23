@@ -70,9 +70,7 @@ public final class PackageInventory {
                 == PackageManager.PERMISSION_GRANTED) {
             return;
         }
-        if (android.os.Build.VERSION.SDK_INT >= 23) {
-            throw new SecurityException("缺少已安装应用访问权限，请先允许 GET_INSTALLED_APPS");
-        }
+        throw new SecurityException("缺少已安装应用访问权限，请先允许 GET_INSTALLED_APPS");
     }
 
     private boolean isPermissionDeclared(Context context) {

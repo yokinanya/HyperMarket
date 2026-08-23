@@ -65,10 +65,12 @@
     <application
         android:name="com.hyper.market.MarketApplication"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
-            android:theme="@style/AppTheme"
-            android:usesCleartextTraffic="false">
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="false">
         <uses-library
             android:name="security-device-credential-sdk.jar"
             android:required="false" />
@@ -84,21 +86,29 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="market" android:host="details" />
-                <data android:scheme="market" android:host="detail" />
-                <data android:scheme="market" android:host="launchordetail" />
-                <data android:scheme="mimarket" android:host="details" />
-                <data android:scheme="mimarket" android:host="detail" />
-                <data android:scheme="mimarket" android:host="launchordetail" />
+                <data android:scheme="market" />
+                <data android:scheme="mimarket" />
+                <data android:host="details" />
+                <data android:host="detail" />
+                <data android:host="launchordetail" />
             </intent-filter>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="http" android:host="m.app.mi.com" android:pathPrefix="/details" />
-                <data android:scheme="https" android:host="m.app.mi.com" android:pathPrefix="/details" />
-                <data android:scheme="http" android:host="app.xiaomi.com" android:pathPrefix="/" />
-                <data android:scheme="https" android:host="app.xiaomi.com" android:pathPrefix="/" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:host="m.app.mi.com" />
+                <data android:pathPrefix="/details" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:host="app.xiaomi.com" />
+                <data android:pathPrefix="/" />
             </intent-filter>
         </activity>
         <activity

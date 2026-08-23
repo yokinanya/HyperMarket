@@ -15,15 +15,15 @@ final class XiaomiDetailParser {
 
     static MarketAppDetails parseDetails(JSONObject response, MarketAppInfo base) {
         JSONObject data = response.optJSONObject("data");
-        JSONObject briefData = firstObject(response, data, "detailTabBriefShow");
+        JSONObject briefData = firstObject(response, detailTabData(response), "detailTabBriefShow");
         List<String> screenshots = new ArrayList<>(base.getScreenshotUrls());
         appendScreenshots(response.optJSONArray("detailVideoAndScreenshotList"), screenshots);
         if (data != null) {
             appendScreenshots(data.optJSONArray("detailVideoAndScreenshotList"), screenshots);
         }
-        String brief = firstText(briefData, "briefShow", "introduction", "description");
+        String brief = firstText(briefData, "introduction", "briefShow", "description");
         if (brief.isEmpty()) {
-            brief = firstText(data, "briefShow", "introduction", "description");
+            brief = firstText(data, "introduction", "briefShow", "description");
         }
         String category = firstText(response, "category", "categoryName");
         if (category.isEmpty()) {
@@ -46,6 +46,19 @@ final class XiaomiDetailParser {
                 parseSameDeveloperApps(response, data),
                 parsePromotions(response, data),
                 XiaomiDetailExtrasParser.parseVideos(response, data));
+    }
+
+    private static JSONObject detailTabData(JSONObject response) {
+        JSONArray tabList = response.optJSONArray("detailTabList");
+        if (tabList != null) {
+            for (int index = 0; index < tabList.length(); index++) {
+                JSONObject tab = tabList.optJSONObject(index);
+                if (tab != null && "detailTabAppInfo".equals(tab.optString("type"))) {
+                    return tab.optJSONObject("data");
+                }
+            }
+        }
+        return null;
     }
 
     static MarketAppInfo parse(JSONObject response, MarketAppInfo base) {

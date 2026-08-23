@@ -18,9 +18,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.isActive
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private const val AboutShader = """
     uniform float2 uResolution;
@@ -119,15 +121,29 @@ private val AboutColors = floatArrayOf(
     0.56f, 0.64f, 1.0f, 1.0f,
 )
 
+private val AboutDarkColors = floatArrayOf(
+    0.12f, 0.12f, 0.22f, 1.0f,
+    0.22f, 0.12f, 0.22f, 1.0f,
+    0.20f, 0.10f, 0.18f, 1.0f,
+    0.08f, 0.14f, 0.24f, 1.0f,
+)
+
+private data class AboutShaderResources(
+    val shader: RuntimeShader,
+    val paint: Paint,
+    val animatedPoints: FloatArray,
+)
+
 @Composable
 internal fun AboutGradientBackground(modifier: Modifier) {
+    val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        AboutRuntimeGradient(modifier)
+        AboutRuntimeGradient(modifier, isDark)
     } else {
         Canvas(modifier) {
             drawRect(
                 Brush.verticalGradient(
-                    listOf(Color(0xFFECECFD), Color(0xFFFDE4EF), Color(0xFFF8F2FA)),
+                    if (isDark) ABOUT_DARK_FALLBACK_COLORS else ABOUT_LIGHT_FALLBACK_COLORS,
                 ),
             )
         }
@@ -136,11 +152,18 @@ internal fun AboutGradientBackground(modifier: Modifier) {
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
-private fun AboutRuntimeGradient(modifier: Modifier) {
-    val shader = remember { RuntimeShader(AboutShader) }
-    val paint = remember { Paint(Paint.ANTI_ALIAS_FLAG) }
+private fun AboutRuntimeGradient(modifier: Modifier, isDark: Boolean) {
+    val resources = remember(isDark) {
+        AboutShaderResources(
+            shader = RuntimeShader(AboutShader),
+            paint = Paint(Paint.ANTI_ALIAS_FLAG),
+            animatedPoints = FloatArray(ANIMATED_POINT_COMPONENTS),
+        )
+    }
+    val animationsEnabled = systemAnimationsEnabled()
     var animationTime by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(animationsEnabled) {
+        if (!animationsEnabled) return@LaunchedEffect
         val startNanos = withFrameNanos { it }
         while (isActive) {
             withFrameNanos { frameNanos ->
@@ -149,41 +172,51 @@ private fun AboutRuntimeGradient(modifier: Modifier) {
         }
     }
     Canvas(modifier) {
-        drawAboutShader(shader, paint, animationTime)
+        drawAboutShader(resources, animationTime, isDark)
     }
 }
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 private fun DrawScope.drawAboutShader(
-    shader: RuntimeShader,
-    paint: Paint,
+    resources: AboutShaderResources,
     animationTime: Float,
+    isDark: Boolean,
 ) {
+    val shader = resources.shader
     val aspectRatio = size.height / size.width
     shader.setFloatUniform("uResolution", size.width, size.height)
     shader.setFloatUniform("uAnimTime", animationTime)
     shader.setFloatUniform("uBound", 0.0f, -0.667f, 1.0f, aspectRatio)
     shader.setFloatUniform("uTranslateY", 0.0f)
     shader.setFloatUniform("uPoints", AboutPoints)
-    shader.setFloatUniform("uColors", AboutColors)
+    shader.setFloatUniform("uColors", if (isDark) AboutDarkColors else AboutColors)
     shader.setFloatUniform("uAlphaMulti", 1.0f)
     shader.setFloatUniform("uNoiseScale", 1.5f)
     shader.setFloatUniform("uPointRadiusMulti", 1.0f)
     shader.setFloatUniform("uSaturateOffset", 0.2f)
     shader.setFloatUniform("uLightOffset", 0.1f)
-    val pointsAnim = FloatArray(8)
     for (index in 0 until 4) {
         val offset = index * 3
         val pointX = AboutPoints[offset]
         val pointY = AboutPoints[offset + 1]
         val animatedX = kotlin.math.sin(animationTime + pointY) * 0.2f + pointX
         val animatedY = kotlin.math.cos(animationTime + animatedX) * 0.2f + pointY
-        pointsAnim[index * 2] = animatedX
-        pointsAnim[index * 2 + 1] = animatedY
+        resources.animatedPoints[index * 2] = animatedX
+        resources.animatedPoints[index * 2 + 1] = animatedY
     }
-    shader.setFloatUniform("uPointsAnim", pointsAnim)
-    paint.shader = shader
+    shader.setFloatUniform("uPointsAnim", resources.animatedPoints)
+    resources.paint.shader = shader
     drawIntoCanvas { canvas ->
-        canvas.nativeCanvas.drawRect(0f, 0f, size.width, size.height, paint)
+        canvas.nativeCanvas.drawRect(0f, 0f, size.width, size.height, resources.paint)
     }
 }
+
+private const val ANIMATED_POINT_COMPONENTS = 8
+
+private val ABOUT_LIGHT_FALLBACK_COLORS = listOf(
+    Color(0xFFECECFD), Color(0xFFFDE4EF), Color(0xFFF8F2FA),
+)
+
+private val ABOUT_DARK_FALLBACK_COLORS = listOf(
+    Color(0xFF171823), Color(0xFF241925), Color(0xFF12131C),
+)

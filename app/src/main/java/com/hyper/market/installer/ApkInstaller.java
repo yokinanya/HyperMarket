@@ -13,6 +13,7 @@ import com.hyper.market.model.ApkArtifact;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,7 +35,8 @@ public final class ApkInstaller {
         if ("Shizuku 静默安装".equals(options.getInstallerMode())) {
             try {
                 PackageInstaller installer = ShizukuBridge.packageInstaller(context);
-                installSession(context, installer, files, artifacts, options);
+                installSession(new InstallRequest(
+                        context, installer, new InstallPayload(files, artifacts, options)));
                 return false;
             } catch (Exception exception) {
                 throw new IOException("Shizuku 安装失败: " + exception.getMessage(), exception);
@@ -42,36 +44,63 @@ public final class ApkInstaller {
         }
         verifyUnknownSourcesPermission(context);
         PackageInstaller installer = context.getPackageManager().getPackageInstaller();
-        installSession(context, installer, files, artifacts, options);
+        installSession(new InstallRequest(
+                context, installer, new InstallPayload(files, artifacts, options)));
         return false;
     }
 
-    private void installSession(Context context, PackageInstaller installer, List<File> files,
-                                List<ApkArtifact> artifacts, InstallOptions options) throws IOException {
+    private void installSession(InstallRequest request) throws IOException {
         PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
                 PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+        InstallOptions options = request.payload.options;
         params.setAppPackageName(options.getPackageName());
-        params.setSize(files.stream().mapToLong(File::length).sum());
+        params.setSize(request.payload.files.stream().mapToLong(File::length).sum());
         params.setInstallReason(PackageManager.INSTALL_REASON_USER);
+        if (!options.isFirstInstall()) enableReplacement(params);
         if (Build.VERSION.SDK_INT >= 31 && options.isNoUserAction()) {
             params.setRequireUserAction(
                     PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
             params.setInstallScenario(PackageManager.INSTALL_SCENARIO_FAST);
         }
-        int sessionId = installer.createSession(params);
-        writeSession(installer, sessionId, files, artifacts);
-        commit(context, installer, sessionId, options, files, artifacts);
+        int sessionId = request.installer.createSession(params);
+        writeSession(request, sessionId);
+        commit(request, sessionId);
     }
 
-    private void writeSession(PackageInstaller installer, int sessionId, List<File> files,
-                              List<ApkArtifact> artifacts) throws IOException {
-        try (PackageInstaller.Session session = installer.openSession(sessionId)) {
-            for (int index = 0; index < files.size(); index++) {
-                writeFile(session, files.get(index), artifacts.get(index));
+    private void enableReplacement(PackageInstaller.SessionParams params) throws IOException {
+        try {
+            Field flags = PackageInstaller.SessionParams.class.getDeclaredField("installFlags");
+            Field replacement = PackageManager.class.getDeclaredField("INSTALL_REPLACE_EXISTING");
+            flags.setAccessible(true);
+            replacement.setAccessible(true);
+            flags.setInt(params, flags.getInt(params) | replacement.getInt(null));
+        } catch (ReflectiveOperationException exception) {
+            throw new IOException("无法启用应用更新安装标志", exception);
+        }
+    }
+
+    private void writeSession(InstallRequest request, int sessionId) throws IOException {
+        try (PackageInstaller.Session session = openSession(request, sessionId)) {
+            for (int index = 0; index < request.payload.files.size(); index++) {
+                writeFile(session, request.payload.files.get(index),
+                        request.payload.artifacts.get(index));
             }
         } catch (IOException | RuntimeException exception) {
-            abandon(installer, sessionId);
-            throw new IOException("Cannot write install session " + sessionId, exception);
+            abandon(request.installer, sessionId);
+            throw new IOException("Cannot write install session " + sessionId + ": "
+                    + exception.getClass().getSimpleName() + ": " + exception.getMessage(), exception);
+        }
+    }
+
+    private PackageInstaller.Session openSession(InstallRequest request, int sessionId)
+            throws IOException {
+        if (!"Shizuku 静默安装".equals(request.payload.options.getInstallerMode())) {
+            return request.installer.openSession(sessionId);
+        }
+        try {
+            return ShizukuBridge.openSession(request.installer, sessionId);
+        } catch (Exception exception) {
+            throw new IOException("Cannot proxy Shizuku install session " + sessionId, exception);
         }
     }
 
@@ -88,10 +117,11 @@ public final class ApkInstaller {
         }
     }
 
-    private void commit(Context context, PackageInstaller installer, int sessionId,
-                        InstallOptions options, List<File> files, List<ApkArtifact> artifacts)
-            throws IOException {
-        Intent intent = new Intent(context, InstallResultReceiver.class).setAction(ACTION_INSTALL_STATUS)
+    private void commit(InstallRequest request, int sessionId) throws IOException {
+        InstallPayload payload = request.payload;
+        InstallOptions options = payload.options;
+        Intent intent = new Intent(request.context, InstallResultReceiver.class)
+                .setAction(ACTION_INSTALL_STATUS)
                 .putExtra(InstallResultReceiver.EXTRA_PACKAGE_NAME, options.getPackageName())
                 .putExtra(InstallResultReceiver.EXTRA_DISPLAY_NAME, options.getDisplayName())
                 .putExtra(InstallResultReceiver.EXTRA_VERSION_NAME, options.getVersionName())
@@ -99,11 +129,12 @@ public final class ApkInstaller {
                 .putExtra(InstallResultReceiver.EXTRA_ICON_URL, options.getIconUrl())
                 .putExtra(InstallResultReceiver.EXTRA_FIRST_INSTALL, options.isFirstInstall())
                 .putExtra(InstallResultReceiver.EXTRA_SAVE_TO_DOWNLOADS, options.isSaveToDownloads())
-                .putStringArrayListExtra(InstallResultReceiver.EXTRA_FILES, paths(files))
-                .putStringArrayListExtra(InstallResultReceiver.EXTRA_ARTIFACT_NAMES, artifactNames(artifacts));
-        PendingIntent pending = PendingIntent.getBroadcast(context, sessionId, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        try (PackageInstaller.Session session = installer.openSession(sessionId)) {
+                .putStringArrayListExtra(InstallResultReceiver.EXTRA_FILES, paths(payload.files))
+                .putStringArrayListExtra(
+                        InstallResultReceiver.EXTRA_ARTIFACT_NAMES, artifactNames(payload.artifacts));
+        PendingIntent pending = PendingIntent.getBroadcast(request.context, sessionId, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+        try (PackageInstaller.Session session = openSession(request, sessionId)) {
             session.commit(pending.getIntentSender());
         }
     }
@@ -113,7 +144,7 @@ public final class ApkInstaller {
     }
 
     private void verifyUnknownSourcesPermission(Context context) throws IOException {
-        if (Build.VERSION.SDK_INT >= 26 && !context.getPackageManager().canRequestPackageInstalls()) {
+        if (!context.getPackageManager().canRequestPackageInstalls()) {
             throw new IOException("请先允许本应用安装未知来源应用");
         }
     }
@@ -128,5 +159,31 @@ public final class ApkInstaller {
         ArrayList<String> result = new ArrayList<>();
         for (ApkArtifact artifact : artifacts) result.add(artifact.getName());
         return result;
+    }
+
+    private static final class InstallPayload {
+        private final List<File> files;
+        private final List<ApkArtifact> artifacts;
+        private final InstallOptions options;
+
+        private InstallPayload(
+                List<File> files, List<ApkArtifact> artifacts, InstallOptions options) {
+            this.files = files;
+            this.artifacts = artifacts;
+            this.options = options;
+        }
+    }
+
+    private static final class InstallRequest {
+        private final Context context;
+        private final PackageInstaller installer;
+        private final InstallPayload payload;
+
+        private InstallRequest(
+                Context context, PackageInstaller installer, InstallPayload payload) {
+            this.context = context;
+            this.installer = installer;
+            this.payload = payload;
+        }
     }
 }

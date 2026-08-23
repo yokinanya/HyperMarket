@@ -70,33 +70,56 @@ public final class FileDownloader {
         }
         File target = new File(directory, fileName);
         File partial = new File(directory, fileName + ".part");
+        if (isComplete(target, fileName, expectedSize, expectedHash)) {
+            return target;
+        }
         if (isComplete(partial, fileName, expectedSize, expectedHash)) {
             move(partial, target);
             return target;
         }
-        long offset = partial.isFile() ? partial.length() : 0;
-        HttpURLConnection connection = open(url);
-        try {
-            if (offset > 0) connection.setRequestProperty("Range", "bytes=" + offset + "-");
-            int status = connection.getResponseCode();
-            if (status < 200 || status >= 300) {
-                throw new IOException("Download HTTP " + status + " for " + url);
+        downloadToPartial(url, partial, expectedSize, control, listener);
+        move(partial, target);
+        verifySize(target, fileName, expectedSize);
+        verifyChecksum(target, fileName, expectedHash);
+        return target;
+    }
+
+    private void downloadToPartial(String url, File partial, long expectedSize,
+                                   DownloadControl control,
+                                   DownloadControl.ProgressListener listener) throws IOException {
+        ParallelFileDownloader parallel = new ParallelFileDownloader(requestHeaders);
+        if (parallel.tryDownload(partial, url, expectedSize, control, listener)) return;
+        boolean complete = false;
+        while (!complete) {
+            control.awaitIfPaused();
+            long offset = partial.isFile() ? partial.length() : 0;
+            HttpURLConnection connection = open(url);
+            try {
+                if (offset > 0) connection.setRequestProperty("Range", "bytes=" + offset + "-");
+                int status = connection.getResponseCode();
+                validateStatus(status, url);
+                boolean append = offset > 0 && status == HttpURLConnection.HTTP_PARTIAL;
+                offset = preparePartial(partial, offset, append);
+                complete = writeBody(
+                        connection.getInputStream(), partial, offset, expectedSize, control, listener);
+            } finally {
+                connection.disconnect();
             }
-            boolean append = offset > 0 && status == HttpURLConnection.HTTP_PARTIAL;
-            if (!append) {
-                offset = 0;
-                if (partial.exists() && !partial.delete()) {
-                    throw new IOException("无法重置未完成的安装包：" + partial);
-                }
-            }
-            writeBody(connection.getInputStream(), partial, offset, expectedSize, control, listener);
-            move(partial, target);
-            verifySize(target, fileName, expectedSize);
-            verifyChecksum(target, fileName, expectedHash);
-            return target;
-        } finally {
-            connection.disconnect();
         }
+    }
+
+    private void validateStatus(int status, String url) throws IOException {
+        if (status < 200 || status >= 300) {
+            throw new IOException("Download HTTP " + status + " for " + url);
+        }
+    }
+
+    private long preparePartial(File partial, long offset, boolean append) throws IOException {
+        if (append) return offset;
+        if (partial.exists() && !partial.delete()) {
+            throw new IOException("无法重置未完成的安装包：" + partial);
+        }
+        return 0;
     }
 
     private HttpURLConnection open(String url) throws IOException {
@@ -119,16 +142,18 @@ public final class FileDownloader {
         return headers;
     }
 
-    private void writeBody(InputStream input, File target, long offset, long expectedSize,
-                           DownloadControl control,
-                           DownloadControl.ProgressListener listener) throws IOException {
+    private boolean writeBody(InputStream input, File target, long offset, long expectedSize,
+                              DownloadControl control,
+                              DownloadControl.ProgressListener listener) throws IOException {
         try (InputStream source = input;
              FileOutputStream output = new FileOutputStream(target, offset > 0)) {
             byte[] buffer = new byte[BUFFER_SIZE];
-            int count;
             long downloaded = offset;
-            while ((count = source.read(buffer)) != -1) {
-                control.awaitIfPaused();
+            while (true) {
+                control.throwIfCancelled();
+                if (control.isPaused()) return false;
+                int count = source.read(buffer);
+                if (count == -1) return true;
                 output.write(buffer, 0, count);
                 downloaded += count;
                 if (listener != null) listener.onProgress(downloaded, expectedSize);

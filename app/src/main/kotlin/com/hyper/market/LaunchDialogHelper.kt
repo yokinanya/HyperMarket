@@ -1,6 +1,7 @@
 package com.hyper.market
 
 import android.content.Context
+import androidx.core.content.edit
 
 object LaunchDialogHelper {
     private const val PREFERENCES = "launch_dialog_pref"
@@ -15,9 +16,7 @@ object LaunchDialogHelper {
     fun markShown(context: Context) {
         context.applicationContext
             .getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_SHOWN, true)
-            .apply()
+            .edit { putBoolean(KEY_SHOWN, true) }
     }
 
     internal val message = """

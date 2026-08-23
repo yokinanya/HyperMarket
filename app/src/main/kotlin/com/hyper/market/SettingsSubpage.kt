@@ -15,9 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.Canvas
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,6 +43,9 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.runtime.mutableIntStateOf
 
 enum class SettingsDestination(val title: String, val summary: String) {
     IGNORED("忽略的更新", "查看并恢复已忽略的应用更新"),
@@ -68,6 +71,8 @@ fun SettingsSubpage(
     onReinstallSaved: (SavedPackageEntry) -> Unit,
     onBack: () -> Unit,
 ) {
+    var confirmClearHistory by remember { mutableStateOf(false) }
+    var historyVersion by remember { mutableIntStateOf(0) }
     if (destination == SettingsDestination.ABOUT) {
         SettingsAboutPage(onBack)
         return
@@ -76,10 +81,26 @@ fun SettingsSubpage(
         modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        item { SubpageHeader(destination.title, onBack) }
+        item {
+            SubpageHeader(
+                destination.title,
+                onBack,
+                trailing = if (destination == SettingsDestination.HISTORY) {
+                    {
+                        IconButton(onClick = { confirmClearHistory = true }) {
+                            Icon(
+                                MiuixIcons.Close,
+                                contentDescription = "清空记录",
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                } else null,
+            )
+        }
         when (destination) {
             SettingsDestination.IGNORED -> item { IgnoredUpdatesPage(updateStore) }
-            SettingsDestination.HISTORY -> item { UpdateHistoryPage(updateStore) }
+            SettingsDestination.HISTORY -> item { UpdateHistoryPage(updateStore, historyVersion) }
             SettingsDestination.SAVED -> item {
                 SavedPackagesPage(updateStore, onOpenSaved, onReinstallSaved)
             }
@@ -92,10 +113,22 @@ fun SettingsSubpage(
             }
         }
     }
+    if (confirmClearHistory) {
+        ConfirmDialog(
+            title = "清空更新历史？",
+            message = "清空后无法恢复这些记录。",
+            onDismiss = { confirmClearHistory = false },
+            onConfirm = {
+                updateStore.clearHistory()
+                historyVersion += 1
+                confirmClearHistory = false
+            },
+        )
+    }
 }
 
 @Composable
-private fun SubpageHeader(title: String, onBack: () -> Unit) {
+private fun SubpageHeader(title: String, onBack: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(modifier = Modifier.fillMaxWidth().height(38.dp)) {
             IconButton(
@@ -107,6 +140,9 @@ private fun SubpageHeader(title: String, onBack: () -> Unit) {
                     contentDescription = "返回",
                     modifier = Modifier.size(24.dp),
                 )
+            }
+            Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp)) {
+                trailing?.invoke()
             }
         }
         PageTitle(title, bottomPadding = 8.dp)

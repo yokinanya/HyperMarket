@@ -1,27 +1,19 @@
 package com.hyper.market
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.market.api.XiaomiApiClient
@@ -31,6 +23,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 internal data class ManualUpdateResult(val message: String, val app: MarketAppInfo?)
 
@@ -67,7 +62,11 @@ internal fun ManualUpdateCard(apiClient: XiaomiApiClient, onInstall: (MarketAppI
         result?.let { message ->
             Text(
                 message,
-                color = if (updateApp != null) AccentBlue else Color(0xFFD14343),
+                color = if (updateApp != null) {
+                    MiuixTheme.colorScheme.primary
+                } else {
+                    MiuixTheme.colorScheme.error
+                },
                 fontSize = 16.sp,
                 modifier = Modifier.padding(top = 12.dp),
             )
@@ -98,26 +97,14 @@ private suspend fun requestManualUpdate(
 
 @Composable
 private fun ManualInput(value: String, onValueChange: (String) -> Unit, hint: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(55.dp)
-            .clip(RoundedCornerShape(32.dp))
-            .background(Color(0xFFF1F1F1)),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = TextStyle(fontSize = 18.sp, color = Color(0xFF777777)),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            decorationBox = { field ->
-                if (value.isEmpty()) Text(hint, color = Color(0xFFAAAAAA), fontSize = 18.sp)
-                field()
-            },
-        )
-    }
+    TextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = hint,
+        useLabelAsPlaceholder = true,
+        singleLine = true,
+    )
 }
 
 @Composable
@@ -132,5 +119,5 @@ private fun FullWidthAction(label: String, onClick: () -> Unit) {
         minHeight = 43.dp,
         colors = ButtonDefaults.buttonColorsPrimary(),
         insideMargin = PaddingValues(0.dp),
-    ) { Text(label, color = Color.White, fontSize = 18.sp) }
+    ) { Text(label, fontSize = 18.sp) }
 }

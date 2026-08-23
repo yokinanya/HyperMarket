@@ -16,6 +16,13 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+internal data class PreparedInstall(
+    val app: MarketAppInfo,
+    val files: List<File>,
+    val artifacts: List<com.hyper.market.model.ApkArtifact>,
+    val options: InstallOptions,
+)
+
 class DownloadCoordinator(
     private val apiClient: XiaomiApiClient,
     private val downloader: FileDownloader,
@@ -31,10 +38,12 @@ class DownloadCoordinator(
         InstallUiStateStore.begin(app.getPackageName(), app.getDisplayName())
         DownloadNotification.begin(context, app.getDisplayName())
         try {
-            val synchronous = performDownloadAndInstall(context, app, settings, control) { status ->
+            val prepared = prepareInstall(context, app, settings, control) { status ->
                 DownloadNotification.update(context, status)
                 onStatus(status)
             }
+            control.awaitIfPaused()
+            val synchronous = installPrepared(context, prepared, onStatus)
             if (synchronous) {
                 InstallUiStateStore.complete(app.getPackageName())
                 DownloadNotification.complete(context, app.getDisplayName())
@@ -53,13 +62,13 @@ class DownloadCoordinator(
         }
     }
 
-    private suspend fun performDownloadAndInstall(
+    internal suspend fun prepareInstall(
         context: Context,
         app: MarketAppInfo,
         settings: AppSettings,
         control: DownloadControl,
         onStatus: suspend (String) -> Unit,
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): PreparedInstall = withContext(Dispatchers.IO) {
         val target = resolveDownloadTarget(app)
         val capabilities = InstallerCapabilities.read(context)
         val metadata = apiClient.loadDownloadMetadata(target)
@@ -72,8 +81,6 @@ class DownloadCoordinator(
                 metadata.artifacts.size, capabilities, control, onStatus,
             )
         }
-        InstallUiStateStore.installing(target.packageName)
-        onStatus("正在安装…")
         val options = InstallOptions(
             settings.installerMode,
             target.packageName,
@@ -86,10 +93,31 @@ class DownloadCoordinator(
             settings.customInstallerPackage,
             target.iconUrl,
         )
-        val synchronous = installer.install(context, files, metadata.artifacts, options)
+        PreparedInstall(target, files, metadata.artifacts, options)
+    }
+
+    internal suspend fun installPrepared(
+        context: Context,
+        prepared: PreparedInstall,
+        onStatus: suspend (String) -> Unit,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val target = prepared.app
+        InstallUiStateStore.installing(target.packageName)
+        onStatus("正在安装 ${target.displayName}…")
+        val synchronous = installer.install(
+            context,
+            prepared.files,
+            prepared.artifacts,
+            prepared.options,
+        )
         if (synchronous) {
-            InstallCompletion.complete(context, options, files, metadata.artifacts.map { it.name })
-        } else if (settings.installerMode == "第三方安装器") {
+            InstallCompletion.complete(
+                context,
+                prepared.options,
+                prepared.files,
+                prepared.artifacts.map { it.name },
+            )
+        } else if (prepared.options.installerMode == "第三方安装器") {
             InstallUiStateStore.awaiting(target.packageName)
             onStatus("已交给第三方安装器，安装结果由第三方应用返回")
         }
@@ -102,10 +130,7 @@ class DownloadCoordinator(
         settings: AppSettings,
         onStatus: suspend (String) -> Unit,
     ) {
-        apps.forEachIndexed { index, app ->
-            onStatus("正在处理 ${index + 1}/${apps.size}：${app.getDisplayName()}")
-            downloadAndInstall(context, app, settings, onStatus)
-        }
+        BatchDownloadCoordinator(this).downloadAndInstallAll(context, apps, settings, onStatus)
     }
 
     private fun downloadDirectoryName(app: MarketAppInfo): String =
@@ -135,7 +160,10 @@ class DownloadCoordinator(
                 onStatus("正在下载 ${index + 1}/${total}…")
             }
             return downloader.download(directory, artifact, control) { downloaded, expected ->
-                DownloadNotification.update(context, downloadProgress(index, total, downloaded, expected))
+                DownloadNotification.update(
+                    context,
+                    "${app.displayName}：${downloadProgress(index, total, downloaded, expected)}",
+                )
                 InstallUiStateStore.downloading(
                     app.packageName,
                     overallProgress(index, total, downloaded, expected),
@@ -144,7 +172,10 @@ class DownloadCoordinator(
         }
         onStatus("正在下载增量补丁 ${index + 1}/${total}…")
         val patch = downloader.downloadDelta(directory, artifact, control) { downloaded, expected ->
-            DownloadNotification.update(context, downloadProgress(index, total, downloaded, expected))
+            DownloadNotification.update(
+                context,
+                "${app.displayName}：${downloadProgress(index, total, downloaded, expected)}",
+            )
             InstallUiStateStore.downloading(
                 app.packageName,
                 overallProgress(index, total, downloaded, expected),

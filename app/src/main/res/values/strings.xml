@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">应用商店</string>
     <string name="install_alert_channel_name">安装结果</string>
+    <string name="install_result_channel_name">安装完成</string>
     <string name="install_channel_name">下载与安装进度</string>
-    <string name="file_provider_authority">com.hyper.market.fileprovider</string>
 </resources>

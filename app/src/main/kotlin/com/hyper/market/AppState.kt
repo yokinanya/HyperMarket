@@ -3,6 +3,7 @@ package com.hyper.market
 import android.content.Context
 import android.os.Build
 import androidx.compose.runtime.Immutable
+import androidx.core.content.edit
 import org.json.JSONObject
 
 @Immutable
@@ -54,23 +55,23 @@ class SettingsStore(context: Context) {
     )
 
     fun write(settings: AppSettings) {
-        preferences.edit()
-            .putBoolean(KEY_SHOW_SYSTEM, settings.showSystemApps)
-            .putBoolean(KEY_INCREMENTAL, settings.incrementalUpdates)
-            .putBoolean(KEY_REMOVE_ADS, settings.removeSearchAds)
-            .putBoolean(KEY_REMOVE_QUICK, settings.removeQuickApps)
-            .putBoolean(KEY_REMOVE_RESERVE, settings.removeReservationApps)
-            .putBoolean(KEY_SHOW_PROMOTIONS, settings.showPromotions)
-            .putBoolean(KEY_SHOW_COMMENTS, settings.showComments)
-            .putBoolean(KEY_SHOW_DEVELOPER, settings.showSameDeveloper)
-            .putBoolean(KEY_OPTIMIZE_NAMES, settings.optimizeNames)
-            .putBoolean(KEY_ISLAND, settings.xiaomiIslandOptimization)
-            .putInt(KEY_START_PAGE, settings.startPage)
-            .putString(KEY_INSTALLER_MODE, settings.installerMode)
-            .putString(KEY_CUSTOM_INSTALLER, settings.customInstallerPackage)
-            .putBoolean(KEY_NO_USER_ACTION, settings.noUserAction)
-            .putBoolean(KEY_SAVE_DOWNLOADS, settings.saveToDownloads)
-            .apply()
+        preferences.edit {
+            putBoolean(KEY_SHOW_SYSTEM, settings.showSystemApps)
+            putBoolean(KEY_INCREMENTAL, settings.incrementalUpdates)
+            putBoolean(KEY_REMOVE_ADS, settings.removeSearchAds)
+            putBoolean(KEY_REMOVE_QUICK, settings.removeQuickApps)
+            putBoolean(KEY_REMOVE_RESERVE, settings.removeReservationApps)
+            putBoolean(KEY_SHOW_PROMOTIONS, settings.showPromotions)
+            putBoolean(KEY_SHOW_COMMENTS, settings.showComments)
+            putBoolean(KEY_SHOW_DEVELOPER, settings.showSameDeveloper)
+            putBoolean(KEY_OPTIMIZE_NAMES, settings.optimizeNames)
+            putBoolean(KEY_ISLAND, settings.xiaomiIslandOptimization)
+            putInt(KEY_START_PAGE, settings.startPage)
+            putString(KEY_INSTALLER_MODE, settings.installerMode)
+            putString(KEY_CUSTOM_INSTALLER, settings.customInstallerPackage)
+            putBoolean(KEY_NO_USER_ACTION, settings.noUserAction)
+            putBoolean(KEY_SAVE_DOWNLOADS, settings.saveToDownloads)
+        }
     }
 
     fun readMarketProfile(): MarketProfileSettings {
@@ -96,7 +97,7 @@ class SettingsStore(context: Context) {
             .put("overrides", JSONObject(profile.overrides))
             .put("templates", templates)
             .put("currentTemplate", profile.currentTemplate)
-        preferences.edit().putString(KEY_PROFILE, json.toString()).apply()
+        preferences.edit { putString(KEY_PROFILE, json.toString()) }
     }
 
     fun readSearchHistory(): List<String> {
@@ -113,7 +114,7 @@ class SettingsStore(context: Context) {
     }
 
     fun writeSearchHistory(history: List<String>) {
-        preferences.edit().putString(KEY_HISTORY, history.joinToString(HISTORY_SEPARATOR)).apply()
+        preferences.edit { putString(KEY_HISTORY, history.joinToString(HISTORY_SEPARATOR)) }
     }
 
     fun deviceSummary(): List<Pair<String, String>> = listOf(

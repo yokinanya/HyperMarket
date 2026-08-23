@@ -1,19 +1,16 @@
 package com.hyper.market
 
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import android.widget.ImageView
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
@@ -21,18 +18,16 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
@@ -40,6 +35,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private val AboutLinks = listOf(
     "Compose Multiplatform" to "github.com/JetBrains/compose-multiplatform",
@@ -57,7 +54,9 @@ private val AboutLinks = listOf(
 internal fun SettingsAboutPage(onBack: () -> Unit) {
     val context = LocalContext.current
     val scrollState = rememberLazyListState()
-    val showCompactTitle = scrollState.firstVisibleItemIndex > 0
+    val showCompactTitle by remember {
+        derivedStateOf { scrollState.firstVisibleItemIndex > 0 }
+    }
     Box(
         modifier = Modifier
             .fillMaxSize(),
@@ -84,7 +83,7 @@ internal fun SettingsAboutPage(onBack: () -> Unit) {
         }
         Text(
             "关于",
-            color = Color(0xFF111111),
+            color = MiuixTheme.colorScheme.onBackground,
             fontSize = 20.sp,
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -101,7 +100,19 @@ private fun AboutHero() {
     val appIcon = androidx.compose.runtime.remember {
         context.packageManager.getApplicationIcon(context.packageName)
     }
-    Box(modifier = Modifier.fillMaxWidth().height(486.5.dp)) {
+    val packageInfo = androidx.compose.runtime.remember {
+        context.packageManager.getPackageInfo(context.packageName, 0)
+    }
+    val versionCode = if (android.os.Build.VERSION.SDK_INT >= 28) {
+        packageInfo.longVersionCode
+    } else {
+        @Suppress("DEPRECATION")
+        packageInfo.versionCode.toLong()
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 360.dp).padding(top = 112.dp, bottom = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         AndroidView(
             factory = {
                 ImageView(it).apply {
@@ -110,27 +121,26 @@ private fun AboutHero() {
                     contentDescription = "应用商店"
                 }
             },
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = 141.dp).size(94.dp),
+            modifier = Modifier.size(94.dp),
         )
         Text(
             "应用商店",
-            color = Color(0xFF8D2874),
+            color = MiuixTheme.colorScheme.primary,
             fontSize = 32.sp,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = 245.dp),
+            modifier = Modifier.padding(top = 10.dp),
         )
         Text(
-            "v2.1.6_fix (132)",
-            color = Color(0xFF5F5960),
+            "v${packageInfo.versionName.orEmpty()} ($versionCode)",
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             fontSize = 14.sp,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = 297.dp),
+            modifier = Modifier.padding(top = 8.dp),
         )
+        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
         Text(
             "开放开源代码许可",
-            color = MutedBlue,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             fontSize = 14.sp,
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .offset(y = 460.dp)
                 .fillMaxWidth()
                 .padding(start = 16.dp),
         )
@@ -139,48 +149,15 @@ private fun AboutHero() {
 
 @Composable
 private fun AboutLinksSection(context: android.content.Context) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White.copy(alpha = 0.62f), RoundedCornerShape(32.dp)),
-    ) {
+    top.yukonga.miuix.kmp.basic.Card(modifier = Modifier.fillMaxWidth()) {
         AboutLinks.forEach { (name, url) ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(73.dp)
-                    .clickable {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://$url")))
-                    }
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(name, fontSize = 17.sp, color = Color(0xFF111111))
-                    Text(url, fontSize = 14.sp, color = Color(0xFF666666))
-                }
-                AboutChevron()
-            }
+            ArrowPreference(
+                title = name,
+                summary = url,
+                onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, "https://$url".toUri()))
+                },
+            )
         }
-    }
-}
-
-@Composable
-private fun AboutChevron() {
-    Canvas(Modifier.size(24.dp)) {
-        val path = Path().apply {
-            moveTo(size.width * 0.68f, size.height * 0.16f)
-            lineTo(size.width * 0.96f, size.height * 0.5f)
-            lineTo(size.width * 0.68f, size.height * 0.84f)
-        }
-        drawPath(
-            path,
-            color = Color(0xFF999999),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(
-                width = 2.5.dp.toPx(),
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round,
-            ),
-        )
     }
 }

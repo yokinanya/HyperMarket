@@ -21,7 +21,8 @@ public final class MiuiFocusBridge {
     private MiuiFocusBridge() { }
 
     public static boolean apply(Context context, Notification notification,
-                                String title, String content, boolean enabled) {
+                                String title, String content, boolean enabled,
+                                boolean firstFloat) {
         if (!enabled) return false;
         Snapshot snapshot = Snapshot.read(context);
         if (!snapshot.supported()) {
@@ -30,7 +31,7 @@ public final class MiuiFocusBridge {
         }
         try {
             Bundle extras = notification.extras;
-            extras.putAll(buildFocusExtras(snapshot.protocol, title, content));
+            extras.putAll(buildFocusExtras(snapshot.protocol, title, content, firstFloat));
             Bundle pictures = new Bundle();
             pictures.putParcelable("key_logo", Icon.createWithResource(context, R.drawable.ic_launcher));
             extras.putBundle(PICS, pictures);
@@ -41,14 +42,15 @@ public final class MiuiFocusBridge {
         }
     }
 
-    private static Bundle buildFocusExtras(int protocol, String title, String content) {
+    private static Bundle buildFocusExtras(
+            int protocol, String title, String content, boolean firstFloat) {
         try {
             Class<?> notificationClass = Class.forName(
                     "com.xzakota.hyper.notification.focus.FocusNotification");
             String methodName = protocol >= 3 ? "buildV3" : "buildV2";
             Consumer<Object> consumer = template -> {
                 try {
-                    configureTemplate(template, title, content, protocol >= 3);
+                    configureTemplate(template, title, content, protocol >= 3, firstFloat);
                 } catch (ReflectiveOperationException exception) {
                     throw new IllegalStateException("HyperNotification 模板配置失败", exception);
                 }
@@ -65,16 +67,18 @@ public final class MiuiFocusBridge {
             Object template,
             String title,
             String content,
-            boolean v3) throws ReflectiveOperationException {
-        invoke(template, "setTicker", String.class, title);
+            boolean v3,
+            boolean firstFloat) throws ReflectiveOperationException {
         invoke(template, "setShowSmallIcon", Boolean.class, true);
         invoke(template, "setUpdatable", Boolean.class, true);
-        invoke(template, "setEnableFloat", Boolean.class, true);
+        invoke(template, "setEnableFloat", Boolean.class, false);
+        if (!v3) invoke(template, "setTicker", String.class, title);
         configureTextBlock(template, "baseInfo", title, content);
         configureTextBlock(template, "hintInfo", title, content);
         if (v3) {
-            invoke(template, "setShowNotification", Boolean.class, true);
-            invoke(template, "setIslandFirstFloat", Boolean.class, true);
+            invoke(template, "setShowNotification", Boolean.class, false);
+            invoke(template, "setIslandFirstFloat", Boolean.class, firstFloat);
+            configureIsland(template, title, content);
             invoke(template, "chatInfo", Consumer.class, (Consumer<Object>) info -> {
                 try {
                     invoke(info, "setTitle", String.class, title);
@@ -85,6 +89,81 @@ public final class MiuiFocusBridge {
                     throw new IllegalStateException("HyperNotification 聊天模板配置失败", exception);
                 }
             });
+        }
+    }
+
+    private static void configureIsland(Object template, String title, String content)
+            throws ReflectiveOperationException {
+        invoke(template, "island", Consumer.class, (Consumer<Object>) island -> {
+            try {
+                invoke(island, "setIslandProperty", Integer.class, 1);
+                invoke(island, "setIslandPriority", Integer.class, 1);
+                configureSmallIsland(island, title);
+                configureBigIsland(island, title, content);
+            } catch (ReflectiveOperationException exception) {
+                throw new IllegalStateException("HyperNotification 岛模板配置失败", exception);
+            }
+        });
+    }
+
+    private static void configureSmallIsland(Object island, String title)
+            throws ReflectiveOperationException {
+        invoke(island, "smallIslandArea", Consumer.class, (Consumer<Object>) area -> {
+            try {
+                invoke(area, "picInfo", Consumer.class,
+                        (Consumer<Object>) pic -> configureIslandPic(pic, title));
+            } catch (ReflectiveOperationException exception) {
+                throw new IllegalStateException("HyperNotification 小岛配置失败", exception);
+            }
+        });
+    }
+
+    private static void configureBigIsland(Object island, String title, String content)
+            throws ReflectiveOperationException {
+        invoke(island, "bigIslandArea", Consumer.class, (Consumer<Object>) area -> {
+            try {
+                invoke(area, "imageTextInfoLeft", Consumer.class, (Consumer<Object>) info -> {
+                    try {
+                        invoke(info, "setType", Integer.class, 1);
+                        invoke(info, "picInfo", Consumer.class,
+                                (Consumer<Object>) pic -> configureIslandPic(pic, title));
+                    } catch (ReflectiveOperationException exception) {
+                        throw new IllegalStateException("HyperNotification 大岛图标配置失败", exception);
+                    }
+                });
+                configureBigIslandText(area, title, content);
+            } catch (ReflectiveOperationException exception) {
+                throw new IllegalStateException("HyperNotification 大岛配置失败", exception);
+            }
+        });
+    }
+
+    private static void configureBigIslandText(Object area, String title, String content)
+            throws ReflectiveOperationException {
+        invoke(area, "imageTextInfoRight", Consumer.class, (Consumer<Object>) info -> {
+            try {
+                invoke(info, "setType", Integer.class, 2);
+                invoke(info, "textInfo", Consumer.class, (Consumer<Object>) text -> {
+                    try {
+                        invoke(text, "setTitle", String.class, title);
+                        invoke(text, "setContent", String.class, content);
+                    } catch (ReflectiveOperationException exception) {
+                        throw new IllegalStateException("HyperNotification 大岛文字配置失败", exception);
+                    }
+                });
+            } catch (ReflectiveOperationException exception) {
+                throw new IllegalStateException("HyperNotification 大岛文字区域配置失败", exception);
+            }
+        });
+    }
+
+    private static void configureIslandPic(Object pic, String title) {
+        try {
+            invoke(pic, "setType", Integer.class, 1);
+            invoke(pic, "setPic", String.class, "key_logo");
+            invoke(pic, "setContentDescription", String.class, title);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("HyperNotification 岛图标配置失败", exception);
         }
     }
 
@@ -167,11 +246,7 @@ public final class MiuiFocusBridge {
             try {
                 return client.call("canShowFocus", null, arguments);
             } finally {
-                if (Build.VERSION.SDK_INT >= 24) {
-                    client.close();
-                } else {
-                    client.release();
-                }
+                client.close();
             }
         }
 

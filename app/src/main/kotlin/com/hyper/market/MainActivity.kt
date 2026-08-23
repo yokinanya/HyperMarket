@@ -5,11 +5,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
 import android.os.Bundle
+import androidx.core.net.toUri
 import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import com.hyper.market.api.XiaomiApiClient
 import com.hyper.market.model.MarketAppInfo
@@ -17,34 +19,36 @@ import com.hyper.market.model.MarketAppInfo
 class MainActivity : ComponentActivity() {
     private val apiClient by lazy { XiaomiApiClient(this) }
     private val deepLinkApp = mutableStateOf<MarketAppInfo?>(null)
-    private val packageVisibilityRefresh = mutableStateOf(0)
+    private val packageVisibilityRefresh = mutableIntStateOf(0)
     private val packageVisibilityPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) packageVisibilityRefresh.value++
+        if (granted) packageVisibilityRefresh.intValue++
     }
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { }
+    private var notificationPermissionRequested = false
     private val packageChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            packageVisibilityRefresh.value++
+            packageVisibilityRefresh.intValue++
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         requestPackageVisibilityPermission()
-        requestNotificationPermission()
         registerPackageChangeReceiver()
         deepLinkApp.value = intent.toMarketApp()
         setContent {
             HyperMarketApp(
                 apiClient = apiClient,
                 initialDetail = deepLinkApp.value,
-                packageVisibilityRefresh = packageVisibilityRefresh.value,
+                packageVisibilityRefresh = packageVisibilityRefresh.intValue,
                 onRequestInstallPermission = ::requestInstallPermission,
+                onRequestNotificationPermission = ::requestNotificationPermission,
             )
         }
     }
@@ -76,9 +80,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestInstallPermission() {
-        if (android.os.Build.VERSION.SDK_INT < 26 || packageManager.canRequestPackageInstalls()) return
+        if (packageManager.canRequestPackageInstalls()) return
         startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-            data = android.net.Uri.parse("package:$packageName")
+            data = "package:$packageName".toUri()
         })
     }
 
@@ -92,9 +96,11 @@ class MainActivity : ComponentActivity() {
 
     private fun requestNotificationPermission() {
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            !notificationPermissionRequested &&
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
+            notificationPermissionRequested = true
             notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
     }

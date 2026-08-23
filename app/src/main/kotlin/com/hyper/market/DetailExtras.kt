@@ -1,7 +1,7 @@
 package com.hyper.market
 
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +28,7 @@ import com.hyper.market.model.DetailPromotion
 import com.hyper.market.model.MarketAppDetails
 import com.hyper.market.model.MarketAppInfo
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun OptionalDetailSections(
@@ -65,7 +66,7 @@ private fun PromotionSection(promotions: List<DetailPromotion>) {
             Card(
                 modifier = Modifier.width(260.dp).clickable {
                     if (promotion.jumpUrl.isNotBlank()) {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(promotion.jumpUrl)))
+                        context.startActivity(Intent(Intent.ACTION_VIEW, promotion.jumpUrl.toUri()))
                     }
                 },
                 cornerRadius = 26.dp,
@@ -81,7 +82,7 @@ private fun PromotionSection(promotions: List<DetailPromotion>) {
                     Text(promotion.title.ifBlank { promotion.activityTag }, fontSize = 18.sp)
                     Text(
                         promotion.description,
-                        color = Color(0xFF666666),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         fontSize = 15.sp,
                         maxLines = 3,
                     )
@@ -101,9 +102,9 @@ private fun CommentSection(details: MarketAppDetails) {
                     Text(
                         "${comment.userName.ifBlank { "用户" }}  ${formatCommentScore(comment.score)}",
                         fontSize = 15.sp,
-                        color = Color(0xFF777777),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     )
-                    Text(comment.content, fontSize = 17.sp, color = Color(0xFF222222))
+                    Text(comment.content, fontSize = 17.sp, color = MiuixTheme.colorScheme.onSurface)
                 }
             }
         }
@@ -126,7 +127,12 @@ private fun RelatedAppsSection(
                     DetailAppIcon(app)
                     Column(modifier = Modifier.padding(start = 12.dp)) {
                         Text(app.displayName, fontSize = 17.sp, maxLines = 1)
-                        Text(app.publisherName, fontSize = 14.sp, color = Color(0xFF777777), maxLines = 1)
+                        Text(
+                            app.publisherName,
+                            fontSize = 14.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            maxLines = 1,
+                        )
                     }
                 }
             }

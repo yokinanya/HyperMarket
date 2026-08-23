@@ -11,8 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,9 +28,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Switch
-
-private val DownloadSummaryWidth = 290.dp
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun InstallerCard(settings: AppSettings, onSettingsChange: (AppSettings) -> Unit) {
@@ -48,7 +46,7 @@ internal fun InstallerCard(settings: AppSettings, onSettingsChange: (AppSettings
     ) {
         Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 32.dp) {
             Column {
-                installerChoices(
+                InstallerChoices(
                     settings = settings,
                     onSettingsChange = onSettingsChange,
                     thirdPartySummary = selectedInstallerLabel ?: "选择能够处理安装包的应用",
@@ -61,19 +59,19 @@ internal fun InstallerCard(settings: AppSettings, onSettingsChange: (AppSettings
         }
         Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 32.dp) {
             Column {
-                InstallerToggle(
-                    "安装包保存至 Download",
-                    "安装时同时将安装包保存到系统 Download 目录",
-                    91.25.dp,
-                    settings.saveToDownloads,
-                ) { onSettingsChange(settings.copy(saveToDownloads = it)) }
+                SwitchPreference(
+                    checked = settings.saveToDownloads,
+                    onCheckedChange = { onSettingsChange(settings.copy(saveToDownloads = it)) },
+                    title = "安装包保存至 Download",
+                    summary = "安装时同时将安装包保存到系统 Download 目录",
+                )
                 if (settings.installerMode == "标准安装" && capabilities.userActionNotRequiredConfigurable) {
-                    InstallerToggle(
-                        "无需用户确认",
-                        "尝试在无需用户操作的情况下安装应用",
-                        73.dp,
-                        settings.noUserAction,
-                    ) { onSettingsChange(settings.copy(noUserAction = it)) }
+                    SwitchPreference(
+                        checked = settings.noUserAction,
+                        onCheckedChange = { onSettingsChange(settings.copy(noUserAction = it)) },
+                        title = "无需用户确认",
+                        summary = "尝试在无需用户操作的情况下安装应用",
+                    )
                 }
             }
         }
@@ -94,9 +92,8 @@ internal fun InstallerCard(settings: AppSettings, onSettingsChange: (AppSettings
         },
     )
 }
-
 @Composable
-private fun ColumnScope.installerChoices(
+private fun ColumnScope.InstallerChoices(
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
     thirdPartySummary: String,
@@ -144,7 +141,7 @@ private fun InstallerChoice(
     ) {
         Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
             Text(title, fontSize = 17.sp)
-            Text(summary, color = Color(0xFF777777), fontSize = 14.sp)
+            Text(summary, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 14.sp)
         }
         Box(
             modifier = Modifier.padding(end = 5.dp).size(48.dp),
@@ -157,6 +154,7 @@ private fun InstallerChoice(
 
 @Composable
 private fun CheckMark() {
+    val primaryColor = MiuixTheme.colorScheme.primary
     Canvas(Modifier.size(48.dp)) {
         val check = Path().apply {
             moveTo(size.width * 0.33f, size.height * 0.50f)
@@ -165,43 +163,12 @@ private fun CheckMark() {
         }
         drawPath(
             path = check,
-            color = AccentBlue,
+            color = primaryColor,
             style = androidx.compose.ui.graphics.drawscope.Stroke(
                 width = size.minDimension * 0.06f,
                 cap = StrokeCap.Round,
                 join = StrokeJoin.Round,
             ),
         )
-    }
-}
-
-@Composable
-private fun InstallerToggle(
-    title: String,
-    summary: String,
-    height: Dp,
-    checked: Boolean,
-    onChecked: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().height(height).clickable { onChecked(!checked) },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f).padding(start = 16.dp, end = 1.dp)) {
-            Text(title, fontSize = 17.sp)
-            Text(
-                summary,
-                color = Color(0xFF777777),
-                fontSize = 14.sp,
-                modifier = if (title == "安装包保存至 Download") {
-                    Modifier.width(DownloadSummaryWidth)
-                } else {
-                    Modifier
-                },
-            )
-        }
-        Box(modifier = Modifier.padding(end = 16.dp)) {
-            Switch(checked = checked, onCheckedChange = onChecked)
-        }
     }
 }

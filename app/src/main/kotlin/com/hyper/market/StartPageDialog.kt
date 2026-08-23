@@ -33,7 +33,6 @@ private val START_PAGE_OPTIONS = listOf("今日", "更新", "搜索")
 private val START_PAGE_DIALOG_OFFSET_X = (-28.2).dp
 private val START_PAGE_DIALOG_OFFSET_Y = (-153).dp
 private const val START_PAGE_DIALOG_DIM_AMOUNT = 0.3f
-private val START_PAGE_SELECTED_COLOR = Color(0xFF347FF5)
 
 @Composable
 internal fun StartPageDialog(
@@ -102,7 +101,7 @@ private fun StartPageOption(
             Image(
                 imageVector = MiuixIcons.Basic.Check,
                 contentDescription = null,
-                colorFilter = ColorFilter.tint(START_PAGE_SELECTED_COLOR),
+                colorFilter = ColorFilter.tint(top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.primary),
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .offset(x = (-20.2).dp, y = (-3.8).dp)

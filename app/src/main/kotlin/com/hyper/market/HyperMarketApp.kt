@@ -1,29 +1,15 @@
 package com.hyper.market
 
-import android.app.Activity
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
@@ -33,25 +19,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.dp
 import android.widget.Toast
 import com.hyper.market.api.XiaomiApiClient
 import com.hyper.market.model.MarketAppInfo
-import top.yukonga.miuix.kmp.basic.NavigationBar
-import top.yukonga.miuix.kmp.basic.NavigationBarDisplayMode
-import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Search
-import top.yukonga.miuix.kmp.icon.extended.Settings
-import top.yukonga.miuix.kmp.icon.extended.Update
+import top.yukonga.miuix.kmp.basic.SnackbarDuration
+import top.yukonga.miuix.kmp.basic.SnackbarHost
+import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-
-private fun settingsDestinationForRoute(route: String): SettingsDestination? =
-    SettingsDestination.values().firstOrNull { destination ->
-        route == "settings-${destination.name.lowercase()}"
-    }
+import top.yukonga.miuix.kmp.theme.ColorSchemeMode
+import top.yukonga.miuix.kmp.theme.ThemeController
 
 @Composable
 fun HyperMarketApp(
@@ -59,8 +36,10 @@ fun HyperMarketApp(
     initialDetail: MarketAppInfo? = null,
     packageVisibilityRefresh: Int = 0,
     onRequestInstallPermission: () -> Unit,
+    onRequestNotificationPermission: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val themeController = remember { ThemeController(ColorSchemeMode.System) }
     val settingsStore = remember(context) { SettingsStore(context) }
     val updateStore = remember(context) { UpdateStore(context) }
     var profile by remember { androidx.compose.runtime.mutableStateOf(settingsStore.readMarketProfile()) }
@@ -75,6 +54,7 @@ fun HyperMarketApp(
     val searchListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     val settingsScrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
     var operation by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
     var showLaunchDialog by remember { androidx.compose.runtime.mutableStateOf(LaunchDialogHelper.shouldShow(context)) }
 
     LaunchedEffect(profile) { apiClient.setProfile(profile.source, profile.overrides) }
@@ -101,7 +81,6 @@ fun HyperMarketApp(
     fun updateProfile(value: MarketProfileSettings) {
         profile = value
         settingsStore.writeMarketProfile(value)
-        apiClient.setProfile(value.source, value.overrides)
     }
 
     fun openDetail(app: MarketAppInfo) {
@@ -116,8 +95,8 @@ fun HyperMarketApp(
 
     fun install(app: MarketAppInfo) {
         if (operation != null) return
+        onRequestNotificationPermission()
         if (settings.installerMode == "标准安装" &&
-            android.os.Build.VERSION.SDK_INT >= 26 &&
             !context.packageManager.canRequestPackageInstalls()
         ) {
             onRequestInstallPermission()
@@ -133,8 +112,8 @@ fun HyperMarketApp(
 
     fun installAll(apps: List<MarketAppInfo>) {
         if (apps.isEmpty() || operation != null) return
+        onRequestNotificationPermission()
         if (settings.installerMode == "标准安装" &&
-            android.os.Build.VERSION.SDK_INT >= 26 &&
             !context.packageManager.canRequestPackageInstalls()
         ) {
             onRequestInstallPermission()
@@ -158,8 +137,8 @@ fun HyperMarketApp(
     }
 
     fun reinstallSaved(entry: SavedPackageEntry) {
+        onRequestNotificationPermission()
         if (settings.installerMode == "标准安装" &&
-            android.os.Build.VERSION.SDK_INT >= 26 &&
             !context.packageManager.canRequestPackageInstalls()
         ) {
             onRequestInstallPermission()
@@ -191,37 +170,27 @@ fun HyperMarketApp(
         detailApp != null -> "detail"
         todayArticleId != null -> "today-article"
         settingsDestination != null -> "settings-${settingsDestination!!.name.lowercase()}"
-        else -> "tab-$selectedTab"
+        else -> "tabs"
     }
     val isAboutPage = settingsDestination == SettingsDestination.ABOUT
     val isArticlePage = todayArticleId != null
+    val animationsEnabled = systemAnimationsEnabled()
     val aboutBackgroundAlpha by animateFloatAsState(
         targetValue = if (isAboutPage) 1f else 0f,
-        animationSpec = tween(320),
+        animationSpec = if (animationsEnabled) tween(320) else snap(),
         label = "about-background-alpha",
     )
-    val view = LocalView.current
-    SideEffect {
-        val window = (view.context as? Activity)?.window ?: return@SideEffect
-        val surfaceColor = if (isAboutPage || isArticlePage) {
-            android.graphics.Color.TRANSPARENT
-        } else {
-            android.graphics.Color.rgb(247, 247, 247)
-        }
-        window.statusBarColor = surfaceColor
-        window.navigationBarColor = if (isArticlePage) {
-            android.graphics.Color.WHITE
-        } else {
-            surfaceColor
-        }
-        if (android.os.Build.VERSION.SDK_INT >= 29) {
-            window.isNavigationBarContrastEnforced = !isAboutPage
-        }
-        val controller = androidx.core.view.WindowCompat.getInsetsController(window, view)
-        controller.isAppearanceLightStatusBars = true
-        controller.isAppearanceLightNavigationBars = true
+    LaunchedEffect(operation) {
+        val message = operation ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(
+            message = message,
+            withDismissAction = true,
+            duration = SnackbarDuration.Long,
+        )
+        if (operation == message) operation = null
     }
-    MiuixTheme {
+    MiuixTheme(controller = themeController) {
+        ConfigureSystemBars(isAboutPage, isArticlePage)
         Box(
             modifier = Modifier.fillMaxSize(),
         ) {
@@ -234,100 +203,63 @@ fun HyperMarketApp(
                 containerColor = if (isAboutPage || isArticlePage) {
                     Color.Transparent
                 } else {
-                    Color(0xFFF7F7F7)
+                    MiuixTheme.colorScheme.surface
                 },
                 bottomBar = {
                     if (detailApp == null && todayArticleId == null && settingsDestination == null) {
                         MarketNavigation(selectedTab) { selectedTab = it }
                     }
                 },
+                snackbarHost = { SnackbarHost(snackbarHostState) },
             ) { paddingValues ->
                 val pageModifier = if (isAboutPage || isArticlePage) {
                     Modifier.fillMaxSize()
                 } else {
                     Modifier.fillMaxSize().padding(paddingValues)
                 }
-                Box(pageModifier) {
-                    AnimatedContent(
-                        targetState = route,
-                        transitionSpec = { routeTransition() },
-                        label = "route-transition",
-                    ) { currentRoute ->
-                        when {
-                            currentRoute == "detail" -> displayedDetailApp?.let {
-                                DetailPage(
-                                    app = it,
-                                    apiClient = apiClient,
-                                    settings = settings,
-                                    packageVisibilityRefresh = packageVisibilityRefresh,
-                                    onInstall = ::install,
-                                    onOpenInstalled = ::openInstalled,
-                                    onOpenDetail = ::openDetail,
-                                    onBack = { detailApp = null },
-                                )
-                            }
-                            currentRoute == "today-article" -> displayedArticleId?.let {
-                                TodayArticlePage(
-                                    resourceId = it,
-                                    apiClient = apiClient,
-                                    onOpenDetail = ::openDetail,
-                                    onBack = { todayArticleId = null },
-                                )
-                            }
-                            currentRoute.startsWith("settings-") -> settingsDestinationForRoute(currentRoute)?.let {
-                                SettingsSubpage(
-                                    it,
-                                    settings,
-                                    profile,
-                                    apiClient,
-                                    updateStore,
-                                    ::updateSettings,
-                                    ::updateProfile,
-                                    ::install,
-                                    ::openSaved,
-                                    ::reinstallSaved,
-                                ) {
-                                    settingsDestination = null
-                                }
-                            }
-                            else -> MainPage(
-                                selectedTab,
-                                searchSession,
-                                searchListState,
-                                settingsScrollState,
-                                apiClient,
-                                settings,
-                                updateStore,
-                                packageVisibilityRefresh,
+                    Box(pageModifier) {
+                        HyperMarketContent(
+                            HyperMarketContentState(
+                                route = route,
+                                displayedDetailApp = displayedDetailApp,
+                                displayedArticleId = displayedArticleId,
+                                selectedTab = selectedTab,
+                                searchSession = searchSession,
+                                searchListState = searchListState,
+                                settingsScrollState = settingsScrollState,
+                                apiClient = apiClient,
+                                settings = settings,
+                                profile = profile,
+                                updateStore = updateStore,
+                                packageVisibilityRefresh = packageVisibilityRefresh,
+                                animationsEnabled = animationsEnabled,
+                                onSelectedTab = { selectedTab = it },
                                 onOpenDetail = ::openDetail,
                                 onOpenArticle = ::openArticle,
-                                onOpenUpdates = { selectedTab = 1 },
                                 onInstall = ::install,
                                 onInstallAll = ::installAll,
-                                onOpenSettings = { settingsDestination = it },
+                                onOpenInstalled = ::openInstalled,
+                                onOpenSaved = ::openSaved,
+                                onReinstallSaved = ::reinstallSaved,
                                 onSettingsChange = ::updateSettings,
-                            )
-                        }
+                                onProfileChange = ::updateProfile,
+                                onOpenSettings = { settingsDestination = it },
+                                onBack = {
+                                    when {
+                                        detailApp != null -> detailApp = null
+                                        todayArticleId != null -> todayArticleId = null
+                                        else -> settingsDestination = null
+                                    }
+                                },
+                            ),
+                        )
                     }
-                    operation?.let { status -> OperationBanner(status) { operation = null } }
-                }
             }
         }
+        LaunchNotice(showLaunchDialog) {
+            LaunchDialogHelper.markShown(context)
+            showLaunchDialog = false
+        }
+        InstallResultDialog()
     }
-    if (showLaunchDialog) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text("关于本软件的说明") },
-            text = { Text(LaunchDialogHelper.message) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        LaunchDialogHelper.markShown(context)
-                        showLaunchDialog = false
-                    },
-                ) { Text("知道了") }
-            },
-        )
-    }
-    InstallResultDialog()
 }

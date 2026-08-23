@@ -20,9 +20,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -42,8 +42,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import com.hyper.market.api.XiaomiApiClient
 import com.hyper.market.model.MarketAppDetails
 import com.hyper.market.model.MarketAppInfo
@@ -56,6 +54,9 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.window.WindowDialog
 import com.hyper.market.installer.DownloadNotificationReceiver
 import com.hyper.market.installer.DownloadTaskRegistry
 
@@ -97,7 +98,7 @@ fun DetailPage(
         ) {
             DetailHeader(detail, displayName, actionState, onInstall, onOpenInstalled)
             DetailStats(detail)
-            error?.let { Text(it, color = Color(0xFFD14343), modifier = Modifier.padding(8.dp)) }
+            error?.let { Text(it, color = MiuixTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
             PreviewSection(detail.getScreenshotUrls(), details?.videos.orEmpty()) { url ->
                 scope.launch {
                     try {
@@ -144,7 +145,7 @@ private fun CompactDetailBar(
         modifier = Modifier
             .fillMaxWidth()
             .height(COMPACT_DETAIL_BAR_HEIGHT)
-            .background(PageBackground),
+            .background(MiuixTheme.colorScheme.background),
     ) {
         Text(
             displayName,
@@ -182,7 +183,7 @@ private fun DetailHeader(
             Text(
                 app.getPublisherName(),
                 style = detailHeaderTextStyle(14.sp),
-                color = Color(0xFF999999),
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -192,113 +193,6 @@ private fun DetailHeader(
             }
         }
     }
-}
-
-@Composable
-private fun DetailActionGroup(
-    app: MarketAppInfo,
-    state: DetailActionState,
-    onInstall: (MarketAppInfo) -> Unit,
-    onOpenInstalled: (MarketAppInfo) -> Unit,
-) {
-    val installStates by InstallUiStateStore.states.collectAsState()
-    val installState = installStates[app.packageName]
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        DetailActionButton(app, state, onInstall, onOpenInstalled)
-        if (state == DetailActionState.INSTALLED || installState?.phase?.isDetailActive() == true) {
-            DetailMoreButton(
-                activeDownload = installState?.phase?.isDetailActive() == true,
-                onRedownload = { onInstall(app) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun DetailMoreButton(activeDownload: Boolean, onRedownload: () -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    Box {
-        Box(
-            modifier = Modifier.size(32.dp).background(Color(0xFFECECEC), RoundedCornerShape(28.dp))
-                .clickable { expanded = true },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(MiuixIcons.Light.More, contentDescription = "更多", modifier = Modifier.size(22.dp))
-        }
-        if (expanded) {
-            val offset = with(density) { IntOffset((-168).dp.roundToPx(), 40.dp.roundToPx()) }
-            Popup(
-                alignment = Alignment.TopStart,
-                offset = offset,
-                onDismissRequest = { expanded = false },
-                properties = PopupProperties(focusable = true),
-            ) {
-                Card(modifier = Modifier.width(200.dp), cornerRadius = 18.dp) {
-                    Text(
-                        if (activeDownload) "取消下载" else "重新下载",
-                        fontSize = 17.sp,
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            expanded = false
-                            if (activeDownload) cancelActiveDownload() else onRedownload()
-                        }.padding(horizontal = 22.dp, vertical = 20.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-private fun cancelActiveDownload() {
-    DownloadTaskRegistry.applyCurrent(DownloadNotificationReceiver.ACTION_CANCEL)
-    InstallUiStateStore.cancelCurrent()
-}
-
-private fun InstallPhase.isDetailActive(): Boolean = when (this) {
-    InstallPhase.QUEUED,
-    InstallPhase.DOWNLOADING,
-    InstallPhase.PAUSED,
-    InstallPhase.INSTALLING,
-    InstallPhase.AWAITING_USER_ACTION,
-    -> true
-    else -> false
-}
-
-@Composable
-private fun DetailActionButton(
-    app: MarketAppInfo,
-    state: DetailActionState,
-    onInstall: (MarketAppInfo) -> Unit,
-    onOpenInstalled: (MarketAppInfo) -> Unit,
-) {
-    when (state) {
-        DetailActionState.NOT_INSTALLED -> InstallActionPill(app, "安装", onInstall)
-        DetailActionState.UPDATE_AVAILABLE -> InstallActionPill(app, "更新", onInstall)
-        DetailActionState.INSTALLED -> ActionPill("打开", primary = false) { onOpenInstalled(app) }
-    }
-}
-
-private fun detailActionState(
-    context: android.content.Context,
-    app: MarketAppInfo,
-): DetailActionState {
-    val installedCode = try {
-        val info = context.packageManager.getPackageInfo(app.packageName, 0)
-        if (android.os.Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
-    } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
-        return DetailActionState.NOT_INSTALLED
-    }
-    return if (app.versionCode > installedCode) {
-        DetailActionState.UPDATE_AVAILABLE
-    } else {
-        DetailActionState.INSTALLED
-    }
-}
-
-private enum class DetailActionState {
-    NOT_INSTALLED,
-    UPDATE_AVAILABLE,
-    INSTALLED,
 }
 
 private fun detailHeaderTextStyle(fontSize: androidx.compose.ui.unit.TextUnit) = TextStyle(
@@ -316,7 +210,11 @@ private fun DetailStats(app: MarketAppInfo) {
     )
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         stats.forEachIndexed { index, stat ->
-            if (index > 0) Spacer(Modifier.width(1.dp).height(64.dp).background(Color(0xFFD9D9D9)))
+            if (index > 0) {
+                Spacer(
+                    Modifier.width(1.dp).height(64.dp).background(MiuixTheme.colorScheme.dividerLine),
+                )
+            }
             StatItem(stat.first, stat.second)
         }
     }
@@ -325,8 +223,8 @@ private fun DetailStats(app: MarketAppInfo) {
 @Composable
 private fun RowScope.StatItem(value: String, label: String) {
     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontSize = 24.sp, color = Color.Black, maxLines = 1)
-        Text(label, fontSize = 14.sp, color = Color(0xFF666666), maxLines = 1)
+        Text(value, fontSize = 24.sp, color = MiuixTheme.colorScheme.onBackground, maxLines = 1)
+        Text(label, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, maxLines = 1)
     }
 }
 

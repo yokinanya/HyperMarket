@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,15 +40,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
-import coil3.request.crossfade
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
-
-internal val PageBackground = Color(0xFFF7F7F7)
-internal val MutedBlue = Color(0xFF8795B7)
-internal val AccentBlue = Color(0xFF1479F5)
-internal val CardWhite = Color.White
+import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun ActionPill(label: String, onClick: () -> Unit) {
@@ -68,7 +64,6 @@ internal fun ActionPill(label: String, primary: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             label,
-            color = if (primary) Color.White else Color(0xFF333333),
             style = TextStyle(
                 fontSize = 14.sp,
                 lineHeight = 16.sp,
@@ -80,7 +75,7 @@ internal fun ActionPill(label: String, primary: Boolean, onClick: () -> Unit) {
 }
 
 private val ACTION_PILL_RADIUS = 28.dp
-private val ACTION_PILL_HEIGHT = 32.dp
+private val ACTION_PILL_HEIGHT = 34.dp
 
 @Composable
 internal fun PageColumn(content: @Composable () -> Unit) {
@@ -99,7 +94,7 @@ internal fun PageTitle(text: String, bottomPadding: androidx.compose.ui.unit.Dp 
         modifier = Modifier.padding(start = 13.75.dp, top = 14.dp, bottom = bottomPadding),
         fontSize = 32.sp,
         fontWeight = FontWeight.Normal,
-        color = Color(0xFF171717),
+        color = MiuixTheme.colorScheme.onBackground,
     )
 }
 
@@ -159,7 +154,6 @@ internal fun RemoteImage(
     val request = remember(url, retryToken) {
         ImageRequest.Builder(context)
             .data(url)
-            .crossfade(REMOTE_IMAGE_CROSSFADE_MS)
             .build()
     }
     val painter = rememberAsyncImagePainter(
@@ -193,8 +187,6 @@ internal fun RemoteImage(
     }
 }
 
-private const val REMOTE_IMAGE_CROSSFADE_MS = 180
-
 @Composable
 private fun IconStatusTile(
     status: String,
@@ -204,12 +196,12 @@ private fun IconStatusTile(
     Box(
         modifier = (if (onRetry == null) modifier else modifier.clickable(onClick = onRetry))
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFFE5E9EF)),
+            .background(MiuixTheme.colorScheme.secondaryContainer),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             status,
-            color = Color(0xFF68717D),
+            color = MiuixTheme.colorScheme.onSecondaryContainer,
             fontSize = 12.sp,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -262,20 +254,20 @@ internal fun GradientFeatureCard(
 }
 
 @Composable
-internal fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
-        text = text,
-        color = MutedBlue,
+        text,
         fontSize = 14.sp,
-        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp),
+        color = MiuixTheme.colorScheme.onBackground,
+        modifier = modifier,
     )
 }
 
 @Composable
 internal fun RowScope.SettingText(title: String, summary: String) {
     Column(modifier = Modifier.weight(1f)) {
-        Text(title, fontSize = 17.sp, color = Color(0xFF202020))
-        Text(summary, fontSize = 14.sp, color = Color(0xFF8A8A8A))
+        Text(title, fontSize = 17.sp, color = MiuixTheme.colorScheme.onSurface)
+        Text(summary, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
     }
 }
 
@@ -285,6 +277,6 @@ internal fun RowDivider() {
         modifier = Modifier
             .fillMaxWidth()
             .height(1.dp)
-            .background(Color(0xFFF0F0F0)),
+            .background(MiuixTheme.colorScheme.dividerLine),
     )
 }

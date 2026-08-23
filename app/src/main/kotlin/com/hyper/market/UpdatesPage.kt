@@ -1,15 +1,16 @@
 package com.hyper.market
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,17 +20,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.market.api.XiaomiApiClient
 import com.hyper.market.model.MarketAppInfo
 import com.hyper.market.model.UpdateInfo
+import kotlinx.coroutines.CancellationException
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.PullToRefresh
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private sealed interface UpdatesState {
     data object Loading : UpdatesState
-    data class Loaded(val updates: List<UpdateInfo>) : UpdatesState
+    data class Loaded(
+        val updates: List<UpdateInfo>,
+        val cachedAt: Long? = null,
+        val refreshError: String? = null,
+    ) : UpdatesState
     data class Failed(val message: String) : UpdatesState
 }
 
@@ -44,10 +51,13 @@ fun UpdatesPage(
     onInstallAll: (List<MarketAppInfo>) -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var refreshKey by remember { mutableIntStateOf(0) }
+    val application = context.applicationContext as MarketApplication
+    var refreshRequestId by remember { mutableIntStateOf(0) }
+    var handledRefreshRequestId by remember { mutableIntStateOf(0) }
+    var isRefreshing by remember { mutableStateOf(false) }
     var state by remember { mutableStateOf<UpdatesState>(UpdatesState.Loading) }
     LaunchedEffect(
-        refreshKey,
+        refreshRequestId,
         settings.showSystemApps,
         settings.removeSearchAds,
         settings.removeQuickApps,
@@ -55,30 +65,57 @@ fun UpdatesPage(
         settings.incrementalUpdates,
         packageVisibilityRefresh,
     ) {
-        state = UpdatesState.Loading
+        val cached = cachedVisibleUpdates(updateStore, settings)
+        val previous = state as? UpdatesState.Loaded
+        val fallback = cached?.let { UpdatesState.Loaded(it.updates, it.cachedAt) } ?: previous
+        fallback?.let { state = it }
+        val manualRefresh = refreshRequestId != handledRefreshRequestId
+        if (manualRefresh) handledRefreshRequestId = refreshRequestId
+        val autoRefresh = !manualRefresh
+        if (autoRefresh && !application.claimUpdateAutoRefresh()) return@LaunchedEffect
+        if (fallback == null) state = UpdatesState.Loading
         state = try {
             UpdatesState.Loaded(
                 loadVisibleUpdates(context, apiClient, updateStore, settings),
             )
+        } catch (exception: CancellationException) {
+            if (autoRefresh) application.releaseUpdateAutoRefresh()
+            throw exception
         } catch (exception: Exception) {
-            UpdatesState.Failed(exception.message ?: "更新检查失败")
+            val message = exception.message ?: "更新检查失败"
+            fallback?.copy(refreshError = message) ?: UpdatesState.Failed(message)
+        } finally {
+            isRefreshing = false
         }
     }
     when (val current = state) {
         UpdatesState.Loading -> UpdatesLoading()
-        is UpdatesState.Failed -> UpdatesError(current.message) { refreshKey++ }
-        is UpdatesState.Loaded -> UpdatesList(
-            current.updates,
-            settings.optimizeNames,
-            onOpenDetail,
-            onInstall,
-            onInstallAll,
-            onIgnore = { update, permanent ->
-                updateStore.ignore(update, permanent)
-                refreshKey++
+        is UpdatesState.Failed -> UpdatesError(current.message) { refreshRequestId++ }
+        is UpdatesState.Loaded -> PullToRefresh(
+            isRefreshing = isRefreshing,
+            refreshTexts = EMPTY_REFRESH_TEXTS,
+            onRefresh = {
+                isRefreshing = true
+                refreshRequestId++
             },
-            onRefresh = { refreshKey++ },
-        )
+        ) {
+            UpdatesList(
+                current.updates,
+                settings.optimizeNames,
+                onOpenDetail,
+                onInstall,
+                onInstallAll,
+                refreshError = current.refreshErrorMessage(),
+                onRetry = {
+                    isRefreshing = true
+                    refreshRequestId++
+                },
+                onIgnore = { update, permanent ->
+                    updateStore.ignore(update, permanent)
+                    state = current.copy(updates = current.updates - update)
+                },
+            )
+        }
     }
 }
 
@@ -89,53 +126,65 @@ private fun UpdatesList(
     onOpenDetail: (MarketAppInfo) -> Unit,
     onInstall: (MarketAppInfo) -> Unit,
     onInstallAll: (List<MarketAppInfo>) -> Unit,
+    refreshError: String?,
+    onRetry: () -> Unit,
     onIgnore: (UpdateInfo, Boolean) -> Unit,
-    onRefresh: () -> Unit,
 ) {
     val listState = rememberLazyListState()
-    val refreshThreshold = with(androidx.compose.ui.platform.LocalDensity.current) { 72.dp.toPx() }
     LazyColumn(
         state = listState,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 12.dp, vertical = 38.dp)
-            .pointerInput(onRefresh, refreshThreshold) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val down = awaitPointerEvent().changes.firstOrNull { it.pressed } ?: continue
-                        var previousY = down.position.y
-                        var distance = 0f
-                        while (true) {
-                            val change = awaitPointerEvent().changes.firstOrNull() ?: break
-                            val delta = change.position.y - previousY
-                            if (delta > 0f && listState.firstVisibleItemIndex == 0 &&
-                                listState.firstVisibleItemScrollOffset == 0
-                            ) {
-                                distance += delta
-                            }
-                            previousY = change.position.y
-                            if (!change.pressed) break
-                        }
-                        if (distance >= refreshThreshold) onRefresh()
-                    }
-                }
-            },
+            .padding(start = 12.dp, top = 38.dp, end = 12.dp),
+        contentPadding = PaddingValues(bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
             PageTitle("更新")
             UpdateHeader(updates, onInstallAll)
         }
+        if (refreshError != null) {
+            item { UpdateCacheError(refreshError, onRetry) }
+        }
         if (updates.isEmpty()) {
             item { EmptyUpdates() }
         } else {
-            item {
-                Column(modifier = Modifier.padding(top = 8.dp)) {
-                    UpdatesPanel(updates, optimizeNames, onOpenDetail, onInstall, onIgnore)
-                }
+            items(updates, key = { it.app.packageName }) { update ->
+                UpdateCard(
+                    update = update,
+                    optimizeNames = optimizeNames,
+                    onOpenDetail = onOpenDetail,
+                    onInstall = onInstall,
+                    onIgnore = onIgnore,
+                )
             }
         }
     }
+}
+
+@Composable
+private fun UpdateCacheError(message: String, onRetry: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        androidx.compose.foundation.layout.Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                message,
+                color = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.weight(1f),
+            )
+            top.yukonga.miuix.kmp.basic.TextButton(text = "重试", onClick = onRetry)
+        }
+    }
+}
+
+private fun UpdatesState.Loaded.refreshErrorMessage(): String? = when {
+    refreshError != null && cachedAt != null ->
+        "刷新失败，当前显示缓存：$refreshError"
+    refreshError != null -> "刷新失败，保留当前列表：$refreshError"
+    else -> null
 }
 
 @Composable
@@ -145,8 +194,12 @@ private fun UpdatesLoading() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        CircularProgressIndicator(color = AccentBlue)
-        Text("正在检查更新…", color = Color(0xFF777777), modifier = Modifier.padding(top = 12.dp))
+        CircularProgressIndicator()
+        Text(
+            "正在检查更新…",
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            modifier = Modifier.padding(top = 12.dp),
+        )
     }
 }
 
@@ -157,7 +210,7 @@ private fun UpdatesError(message: String, onRetry: () -> Unit) {
         Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
             Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("更新检查失败", fontSize = 20.sp)
-                Text(message, color = Color(0xFF777777))
+                Text(message, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                 ActionPill("重试", onRetry)
             }
         }
@@ -182,3 +235,5 @@ internal fun formatBytes(bytes: Long): String {
         "%.1fMB".format(java.util.Locale.CHINA, megabytes)
     }
 }
+
+private val EMPTY_REFRESH_TEXTS = List(4) { "" }

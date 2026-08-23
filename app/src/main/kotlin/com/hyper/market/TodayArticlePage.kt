@@ -15,12 +15,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -29,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.market.api.XiaomiApiClient
@@ -38,6 +40,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.icon.extended.Back
 
 @Composable
@@ -45,11 +48,12 @@ fun TodayArticlePage(
     resourceId: String,
     apiClient: XiaomiApiClient,
     onOpenDetail: (MarketAppInfo) -> Unit,
+    onInstall: (MarketAppInfo) -> Unit,
     onBack: () -> Unit,
 ) {
     var article by remember(resourceId) { mutableStateOf<TodayArticle?>(null) }
     var error by remember(resourceId) { mutableStateOf<String?>(null) }
-    var reloadKey by remember(resourceId) { mutableStateOf(0) }
+    var reloadKey by remember(resourceId) { mutableIntStateOf(0) }
     LaunchedEffect(resourceId, reloadKey) {
         error = null
         try {
@@ -59,7 +63,7 @@ fun TodayArticlePage(
         }
     }
     when {
-        article != null -> ArticleLoadedPage(article!!, onOpenDetail, onBack)
+        article != null -> ArticleLoadedPage(article!!, onOpenDetail, onInstall, onBack)
         else -> ArticleLoadingPage(error, onBack) { reloadKey++ }
     }
 }
@@ -68,18 +72,24 @@ fun TodayArticlePage(
 private fun ArticleLoadedPage(
     article: TodayArticle,
     onOpenDetail: (MarketAppInfo) -> Unit,
+    onInstall: (MarketAppInfo) -> Unit,
     onBack: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
     ) {
         ArticleHero(article, onBack)
-        ArticleBody(article, onOpenDetail)
+        ArticleBody(article, onOpenDetail, onInstall)
     }
 }
 
 @Composable
 private fun ArticleHero(article: TodayArticle, onBack: () -> Unit) {
+    val backIconTint = if (MiuixTheme.colorScheme.background.luminance() < 0.5f) {
+        Color.White
+    } else {
+        Color.Black
+    }
     Box(
         modifier = Modifier.fillMaxWidth().height(articleHeroHeight(article)),
     ) {
@@ -100,7 +110,7 @@ private fun ArticleHero(article: TodayArticle, onBack: () -> Unit) {
                 MiuixIcons.Back,
                 contentDescription = "返回",
                 modifier = Modifier.size(38.dp),
-                tint = Color.Black,
+                tint = backIconTint,
             )
         }
         ArticleHeroFooter(article, Modifier.align(Alignment.BottomStart))
@@ -141,11 +151,11 @@ private fun ArticleHeroFooter(article: TodayArticle, modifier: Modifier) {
 }
 
 @Composable
-private fun ArticleBody(article: TodayArticle, onOpenDetail: (MarketAppInfo) -> Unit) {
+private fun ArticleBody(article: TodayArticle, onOpenDetail: (MarketAppInfo) -> Unit, onInstall: (MarketAppInfo) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(MiuixTheme.colorScheme.background)
             .padding(horizontal = 24.dp, vertical = 28.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
@@ -153,14 +163,14 @@ private fun ArticleBody(article: TodayArticle, onOpenDetail: (MarketAppInfo) -> 
             segment.text?.let { ArticleText(it) }
             segment.imageUrl?.let { ArticleImage(it, article.title) }
         }
-        article.apps.forEach { app -> ArticleAppCard(app, onOpenDetail) }
+        article.apps.forEach { app -> ArticleAppCard(app, onOpenDetail, onInstall) }
         Spacer(Modifier.height(8.dp))
     }
 }
 
 @Composable
 private fun ArticleText(text: String) {
-    Text(text, fontSize = 18.sp, lineHeight = 29.sp, color = Color(0xFF222222))
+    Text(text, fontSize = 18.sp, lineHeight = 29.sp, color = MiuixTheme.colorScheme.onSurface)
 }
 
 @Composable
@@ -176,7 +186,7 @@ private fun ArticleImage(url: String, title: String) {
 }
 
 @Composable
-private fun ArticleAppCard(app: MarketAppInfo, onOpenDetail: (MarketAppInfo) -> Unit) {
+private fun ArticleAppCard(app: MarketAppInfo, onOpenDetail: (MarketAppInfo) -> Unit, onInstall: (MarketAppInfo) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 24.dp) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(18.dp),
@@ -185,9 +195,9 @@ private fun ArticleAppCard(app: MarketAppInfo, onOpenDetail: (MarketAppInfo) -> 
             RemoteAppIcon(app.iconUrl, app.displayName, Modifier.size(62.dp))
             Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
                 Text(app.displayName, fontSize = 19.sp)
-                Text(app.publisherName, fontSize = 14.sp, color = Color(0xFF888888))
+                Text(app.publisherName, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
-            ActionPill("查看") { onOpenDetail(app) }
+            ActionPill("安装") { onInstall(app) }
         }
     }
 }
@@ -204,7 +214,11 @@ private fun ArticleLoadingPage(
     ) {
         ArticleHeader("今日专题", onBack)
         if (error == null) {
-            Text("加载中…", color = Color(0xFF777777), modifier = Modifier.padding(12.dp))
+            Text(
+                "加载中…",
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.padding(12.dp),
+            )
         } else {
             ArticleErrorState(error, onRetry)
         }
@@ -275,8 +289,8 @@ private fun cleanArticleBody(html: String): String {
 @Composable
 private fun ArticleErrorState(message: String, onRetry: () -> Unit) {
     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("专题内容加载失败", color = Color(0xFFD14343), fontSize = 20.sp)
-        Text(message, color = Color(0xFF777777), fontSize = 15.sp)
+        Text("专题内容加载失败", color = MiuixTheme.colorScheme.error, fontSize = 20.sp)
+        Text(message, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 15.sp)
         ActionPill("重试", onRetry)
     }
 }

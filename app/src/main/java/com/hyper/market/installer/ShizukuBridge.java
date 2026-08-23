@@ -11,6 +11,7 @@ import android.os.Process;
 import android.os.RemoteException;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 public final class ShizukuBridge {
@@ -48,7 +49,31 @@ public final class ShizukuBridge {
         IBinder installerBinder = ((IInterface) rawInstaller).asBinder();
         IInterface installerInterface = asInterface(
                 "android.content.pm.IPackageInstaller", new ShizukuBinderProxy(shizuku, installerBinder));
-        return newPackageInstaller(installerInterface, context.getPackageName());
+        return newPackageInstaller(
+                installerInterface, InstallerIdentity.XIAOMI_MARKET_PACKAGE);
+    }
+
+    static PackageInstaller.Session openSession(PackageInstaller installer, int sessionId)
+            throws Exception {
+        PackageInstaller.Session direct = installer.openSession(sessionId);
+        IInterface sessionInterface = sessionInterface(direct);
+        Class<?> interfaceClass = Class.forName("android.content.pm.IPackageInstallerSession");
+        IInterface proxy = asInterface(interfaceClass.getName(),
+                new ShizukuBinderProxy(service, sessionInterface.asBinder()));
+        Constructor<?> constructor = PackageInstaller.Session.class
+                .getDeclaredConstructor(interfaceClass);
+        constructor.setAccessible(true);
+        return (PackageInstaller.Session) constructor.newInstance(proxy);
+    }
+
+    private static IInterface sessionInterface(PackageInstaller.Session session) throws Exception {
+        for (Field field : PackageInstaller.Session.class.getDeclaredFields()) {
+            if (!IInterface.class.isAssignableFrom(field.getType())) continue;
+            field.setAccessible(true);
+            Object value = field.get(session);
+            if (value instanceof IInterface) return (IInterface) value;
+        }
+        throw new IllegalStateException("PackageInstaller Session 接口不可用");
     }
 
     private static IBinder serviceBinder(String packageName) throws Exception {

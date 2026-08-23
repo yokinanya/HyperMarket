@@ -1,13 +1,16 @@
 package com.hyper.market
 
 import android.content.Context
-import android.net.Uri
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import com.hyper.market.model.MarketAppInfo
 import com.hyper.market.model.UpdateInfo
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 data class IgnoredUpdate(
     val packageName: String,
@@ -25,6 +28,7 @@ data class UpdateHistoryEntry(
     val versionCode: Long,
     val installedAt: Long,
     val firstInstall: Boolean,
+    val iconUrl: String = "",
 )
 
 data class SavedPackageEntry(
@@ -55,8 +59,25 @@ class UpdateStore(context: Context) {
         "market_update_data",
         Context.MODE_PRIVATE,
     )
+    private val cacheRevisionState = MutableStateFlow(0L)
+    internal val cacheRevision = cacheRevisionState.asStateFlow()
 
     fun ignoredUpdates(): List<IgnoredUpdate> = readArray(KEY_IGNORED).map(::ignoredFromJson)
+
+    internal fun cachedUpdates(now: Long = System.currentTimeMillis()): CachedUpdates? {
+        val cachedAt = preferences.getLong(KEY_UPDATE_CACHE_TIME, 0L)
+        if (cachedAt <= 0L || now - cachedAt > UPDATE_CACHE_MAX_AGE_MS) return null
+        val encoded = preferences.getString(KEY_UPDATE_CACHE, null) ?: return null
+        return CachedUpdates(UpdateCacheCodec.decode(encoded), cachedAt)
+    }
+
+    internal fun cacheUpdates(updates: List<UpdateInfo>, cachedAt: Long = System.currentTimeMillis()) {
+        preferences.edit {
+            putString(KEY_UPDATE_CACHE, UpdateCacheCodec.encode(updates))
+            putLong(KEY_UPDATE_CACHE_TIME, cachedAt)
+        }
+        cacheRevisionState.value++
+    }
 
     fun ignore(update: UpdateInfo, permanent: Boolean) {
         val entry = IgnoredUpdate(
@@ -91,14 +112,16 @@ class UpdateStore(context: Context) {
             app.versionCode,
             System.currentTimeMillis(),
             firstInstall,
+            app.iconUrl,
         )
         val remaining = history().filterNot {
             it.packageName == entry.packageName && it.versionCode == entry.versionCode
         }
         writeArray(KEY_HISTORY, (listOf(entry) + remaining).map(::historyToJson))
+        clearUpdateCache()
     }
 
-    fun clearHistory() = preferences.edit().remove(KEY_HISTORY).apply()
+    fun clearHistory() = preferences.edit { remove(KEY_HISTORY) }
 
     fun savedPackages(): List<SavedPackageEntry> = readArray(KEY_SAVED).map(::savedFromJson)
 
@@ -146,12 +169,12 @@ class UpdateStore(context: Context) {
 
     private fun deleteSavedArtifact(artifact: SavedPackageArtifact) {
         if (artifact.path.startsWith("content://")) {
-            val deleted = applicationContext.contentResolver.delete(Uri.parse(artifact.path), null, null)
+            val deleted = applicationContext.contentResolver.delete(artifact.path.toUri(), null, null)
             if (deleted != 1) error("无法删除安装包：${artifact.path}")
             return
         }
         val file = if (artifact.path.startsWith("file://")) {
-            File(requireNotNull(Uri.parse(artifact.path).path) { "保存的安装包路径为空" })
+            File(requireNotNull(artifact.path.toUri().path) { "保存的安装包路径为空" })
         } else {
             File(artifact.path)
         }
@@ -167,7 +190,15 @@ class UpdateStore(context: Context) {
     private fun writeArray(key: String, values: List<JSONObject>) {
         val array = JSONArray()
         values.forEach(array::put)
-        preferences.edit().putString(key, array.toString()).apply()
+        preferences.edit { putString(key, array.toString()) }
+    }
+
+    private fun clearUpdateCache() {
+        preferences.edit {
+            remove(KEY_UPDATE_CACHE)
+            remove(KEY_UPDATE_CACHE_TIME)
+        }
+        cacheRevisionState.value++
     }
 
     private fun ignoredToJson(value: IgnoredUpdate) = JSONObject()
@@ -194,6 +225,7 @@ class UpdateStore(context: Context) {
         .put("versionCode", value.versionCode)
         .put("installedAt", value.installedAt)
         .put("firstInstall", value.firstInstall)
+        .put("iconUrl", value.iconUrl)
 
     private fun historyFromJson(value: JSONObject) = UpdateHistoryEntry(
         value.getString("packageName"),
@@ -202,6 +234,7 @@ class UpdateStore(context: Context) {
         value.getLong("versionCode"),
         value.getLong("installedAt"),
         value.getBoolean("firstInstall"),
+        value.optString("iconUrl", ""),
     )
 
     private fun savedToJson(value: SavedPackageEntry) = JSONObject()
@@ -258,5 +291,8 @@ class UpdateStore(context: Context) {
         const val KEY_IGNORED = "ignored_updates"
         const val KEY_HISTORY = "update_history"
         const val KEY_SAVED = "saved_packages"
+        const val KEY_UPDATE_CACHE = "available_updates_cache"
+        const val KEY_UPDATE_CACHE_TIME = "available_updates_cache_time"
+        const val UPDATE_CACHE_MAX_AGE_MS = 21_600_000L
     }
 }

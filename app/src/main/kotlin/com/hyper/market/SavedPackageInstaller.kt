@@ -3,6 +3,7 @@ package com.hyper.market
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.core.content.FileProvider
 import com.hyper.market.installer.ApkInstaller
 import com.hyper.market.installer.InstallCompletion
@@ -62,7 +63,7 @@ class SavedPackageInstaller(private val installer: ApkInstaller) {
     ): File {
         if (!location.startsWith("content://")) {
             val file = if (location.startsWith("file://")) {
-                File(requireNotNull(Uri.parse(location).path) { "保存的安装包路径为空：$location" })
+                File(requireNotNull(location.toUri().path) { "保存的安装包路径为空：$location" })
             } else {
                 File(location)
             }
@@ -71,7 +72,7 @@ class SavedPackageInstaller(private val installer: ApkInstaller) {
         val directory = File(context.cacheDir, "saved-install/${safeSegment(entry.id)}")
         check(directory.exists() || directory.mkdirs()) { "无法创建保存安装包临时目录" }
         val target = File(directory, "$index-${safeSegment(fileName)}")
-        context.contentResolver.openInputStream(Uri.parse(location)).use { input ->
+        context.contentResolver.openInputStream(location.toUri()).use { input ->
             checkNotNull(input) { "无法读取保存的安装包：$location" }
             target.outputStream().use { output -> input.copyTo(output) }
         }
@@ -80,7 +81,7 @@ class SavedPackageInstaller(private val installer: ApkInstaller) {
     }
 
     private fun uriFor(context: Context, location: String): Uri {
-        val parsed = Uri.parse(location)
+        val parsed = location.toUri()
         if (parsed.scheme == "content") return parsed
         val file = if (parsed.scheme == "file") {
             File(requireNotNull(parsed.path) { "保存的安装包路径为空：$location" })

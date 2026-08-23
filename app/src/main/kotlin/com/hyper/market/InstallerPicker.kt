@@ -1,9 +1,12 @@
 package com.hyper.market
 
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.core.net.toUri
 import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -13,7 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,7 +62,7 @@ private fun InstallerCandidateList(
     if (candidates.isEmpty()) {
         Text(
             "没有可用的包安装器",
-            color = Color(0xFFD14343),
+            color = MiuixTheme.colorScheme.error,
             fontSize = 16.sp,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
         )
@@ -85,7 +88,7 @@ private fun InstallerCandidateRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(candidate.label, fontSize = 17.sp)
-            Text(candidate.packageName, color = Color(0xFF777777), fontSize = 14.sp)
+            Text(candidate.packageName, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 14.sp)
         }
         RadioButton(selected = selected, onClick = { onSelected(candidate) })
     }
@@ -115,15 +118,13 @@ internal fun findInstallerCandidates(context: Context): List<InstallerCandidate>
 
 private fun installerProbeIntents(context: Context): List<Intent> {
     val probeUris = listOf(
-        Uri.parse("content://${context.packageName}.fileprovider/installer_probe.apk"),
-        Uri.parse("file:///sdcard/Download/installer_probe.apk"),
+        "content://${context.packageName}.fileprovider/installer_probe.apk".toUri(),
     )
     val intents = mutableListOf(
         Intent(Intent.ACTION_VIEW).addCategory(Intent.CATEGORY_DEFAULT).setType(APK_MIME),
     )
     probeUris.forEach { uri ->
         intents += apkIntent(Intent.ACTION_VIEW, uri)
-        intents += apkIntent(Intent.ACTION_INSTALL_PACKAGE, uri)
     }
     return intents
 }

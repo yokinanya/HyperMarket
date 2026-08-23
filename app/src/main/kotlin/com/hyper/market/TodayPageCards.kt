@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.hyper.market.model.MarketAppInfo
 import com.hyper.market.model.TodayFeaturedItem
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun TodayFeatureCard(item: TodayFeaturedItem, onClick: () -> Unit) {
@@ -69,7 +70,7 @@ private fun TodayFeatureFooter(item: TodayFeaturedItem, modifier: Modifier = Mod
         Text(
             text = if (item.isGoldenAward) "金米奖 · ${item.title}" else "进行中的活动",
             color = Color.White.copy(alpha = 0.72f),
-            style = todayFeatureTextStyle(16.sp, 20.sp),
+            style = todayFeatureTextStyle(14.sp, 18.sp),
             maxLines = 1,
         )
         if (item.isGoldenAward && item.summary.isNotBlank()) {
@@ -133,7 +134,7 @@ internal fun TodayLoadingState() {
                 .padding(top = if (index == 0) 0.dp else 20.dp)
                 .height(330.dp)
                 .clip(RoundedCornerShape(38.dp))
-                .background(Color(0xFFE9EDF2)),
+                .background(MiuixTheme.colorScheme.secondaryContainer),
         )
     }
 }
@@ -141,8 +142,8 @@ internal fun TodayLoadingState() {
 @Composable
 internal fun TodayErrorState(message: String, onRetry: () -> Unit) {
     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("今日内容加载失败", color = Color(0xFFD14343), fontSize = 20.sp)
-        Text(message, color = Color(0xFF777777), fontSize = 15.sp)
+        Text("今日内容加载失败", color = MiuixTheme.colorScheme.error, fontSize = 20.sp)
+        Text(message, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 15.sp)
         ActionPill("重试", onRetry)
     }
 }
@@ -150,7 +151,7 @@ internal fun TodayErrorState(message: String, onRetry: () -> Unit) {
 @Composable
 internal fun TodayEmptyState(onRetry: () -> Unit) {
     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("暂无今日内容", color = Color(0xFF777777), fontSize = 20.sp)
+        Text("暂无今日内容", color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 20.sp)
         ActionPill("重新加载", onRetry)
     }
 }

@@ -25,6 +25,11 @@ class DownloadService : Service() {
     private var taskRunning = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == NOTIFICATION_VISIBILITY_ACTION) {
+            updateForeground(intent.getBooleanExtra(EXTRA_VISIBLE, true))
+            if (!taskRunning) stopSelf(startId)
+            return START_NOT_STICKY
+        }
         val command = if (intent?.action == CONTROL_ACTION) {
             DownloadTaskStore.consumeCommand(this).ifBlank { error("下载控制命令为空") }
         } else {
@@ -65,10 +70,28 @@ class DownloadService : Service() {
                 taskRunning = false
                 DownloadTaskRegistry.clearPendingAction()
                 DownloadTaskStore.clear(this@DownloadService)
-                stopForeground(STOP_FOREGROUND_DETACH)
-                stopSelf(startId)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                DownloadNotification.cancelOngoing(this@DownloadService)
+                stopSelf()
             }
         }
+    }
+
+    private fun updateForeground(visible: Boolean) {
+        if (!taskRunning) {
+            DownloadNotification.cancelOngoing(this)
+            return
+        }
+        if (!visible) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            DownloadNotification.hideOngoing(this)
+            return
+        }
+        startForeground(
+            DownloadNotification.notificationId(),
+            DownloadNotification.foreground(this, "正在下载…"),
+        )
+        DownloadNotification.refresh(this)
     }
 
     override fun onDestroy() {
@@ -115,6 +138,15 @@ class DownloadService : Service() {
 
     companion object {
         const val CONTROL_ACTION = "com.hyper.market.action.DOWNLOAD_CONTROL"
+        const val NOTIFICATION_VISIBILITY_ACTION =
+            "com.hyper.market.action.DOWNLOAD_NOTIFICATION_VISIBILITY"
+
+        fun setProgressNotificationVisible(context: Context, visible: Boolean) {
+            val intent = Intent(context, DownloadService::class.java)
+                .setAction(NOTIFICATION_VISIBILITY_ACTION)
+                .putExtra(EXTRA_VISIBLE, visible)
+            context.startService(intent)
+        }
 
         fun start(
             context: Context,
@@ -170,6 +202,7 @@ class DownloadService : Service() {
         }
 
         private const val EXTRA_APPS = "download_apps"
+        private const val EXTRA_VISIBLE = "download_notification_visible"
     }
 
     private fun decodeProfileOverrides(intent: Intent): Map<String, String> {

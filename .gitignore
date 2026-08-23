@@ -6,6 +6,7 @@ build/
 .kotlin/
 **/.kotlin/
 local.properties
+key.properties
 *.iml
 .idea/
 .externalNativeBuild/
@@ -31,3 +32,4 @@ reverse-work/
 .codex/
 .DS_Store
 Thumbs.db
+.tmp*

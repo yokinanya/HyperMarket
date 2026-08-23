@@ -6,14 +6,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.material3.Text
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +23,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.window.WindowDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 fun IgnoredUpdatesPage(store: UpdateStore) {
@@ -32,11 +34,11 @@ fun IgnoredUpdatesPage(store: UpdateStore) {
     val permanent = entries.filter { it.permanent }
     val temporary = entries.filterNot { it.permanent }
     Column {
-        SectionLabel("永久忽略更新")
+        SectionLabel("永久忽略更新", Modifier.padding(start = 16.dp))
         Spacer(Modifier.height(6.dp))
         IgnoredGroup(permanent, store) { entries = store.ignoredUpdates() }
         Spacer(Modifier.height(12.dp))
-        SectionLabel("仅忽略本次更新")
+        SectionLabel("仅忽略本次更新", Modifier.padding(start = 16.dp))
         Spacer(Modifier.height(6.dp))
         IgnoredGroup(temporary, store) { entries = store.ignoredUpdates() }
     }
@@ -64,7 +66,7 @@ private fun IgnoredGroup(
                         Text(
                             "${entry.packageName}\n${entry.versionName} · " +
                                 if (entry.permanent) "永久忽略" else "忽略本次更新",
-                            color = Color(0xFF777777),
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             fontSize = 15.sp,
                         )
                     }
@@ -79,49 +81,57 @@ private fun IgnoredGroup(
 }
 
 @Composable
-fun UpdateHistoryPage(store: UpdateStore) {
-    var entries by remember { mutableStateOf(store.history()) }
-    var confirmClear by remember { mutableStateOf(false) }
+fun UpdateHistoryPage(store: UpdateStore, refreshKey: Any? = null) {
+    var entries by remember(refreshKey) { mutableStateOf(store.history()) }
     if (entries.isEmpty()) {
         CenteredDataEmpty("暂无更新记录")
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            ActionPill("清空记录") {
-                confirmClear = true
+        entries
+            .groupBy { historyDateLabel(it.installedAt) }
+            .forEach { (date, dayEntries) ->
+                SectionLabel(date, Modifier.padding(start = 16.dp))
+                Spacer(Modifier.height(6.dp))
+                dayEntries.forEach { entry -> HistoryCard(entry) }
             }
-        }
-        entries.forEach { entry -> HistoryCard(entry) }
-    }
-    if (confirmClear) {
-        ConfirmDialog(
-            title = "清空更新历史？",
-            message = "清空后无法恢复这些记录。",
-            onDismiss = { confirmClear = false },
-            onConfirm = {
-                store.clearHistory()
-                entries = emptyList()
-                confirmClear = false
-            },
-        )
     }
 }
 
 @Composable
 private fun HistoryCard(entry: UpdateHistoryEntry) {
     Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 24.dp) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(entry.displayName, fontSize = 20.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (entry.iconUrl.isNotBlank()) {
+                RemoteAppIcon(entry.iconUrl, entry.displayName, Modifier.size(48.dp))
+            } else {
+                InstalledAppIcon(entry.packageName, entry.displayName, Modifier.size(48.dp))
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+                Text(entry.displayName, fontSize = 17.sp, maxLines = 1)
+                Text(
+                    "${if (entry.firstInstall) "安装" else "更新"} ${entry.versionName}",
+                    fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+            }
             Text(
-                "${entry.versionName} · ${if (entry.firstInstall) "首次安装" else "更新完成"}",
-                color = Color(0xFF555555),
+                historyTimeLabel(entry.installedAt),
+                fontSize = 14.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             )
-            Text(entry.packageName, color = Color(0xFF888888), fontSize = 14.sp)
-            Text(formatTimestamp(entry.installedAt), color = Color(0xFF888888), fontSize = 14.sp)
         }
     }
 }
+
+private fun historyDateLabel(timestamp: Long): String =
+    java.text.SimpleDateFormat("yyyy年M月d日", java.util.Locale.CHINA).format(java.util.Date(timestamp))
+
+private fun historyTimeLabel(timestamp: Long): String =
+    java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA).format(java.util.Date(timestamp))
 
 @Composable
 fun SavedPackagesPage(
@@ -152,9 +162,13 @@ fun SavedPackagesPage(
                         Text(
                             "${entry.versionName} · ${formatFileSize(entry.size)}" +
                                 if (entry.artifacts.size > 1) " · ${entry.artifacts.size} 个文件" else "",
-                            color = Color(0xFF555555),
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         )
-                        Text(entry.fileName, color = Color(0xFF888888), fontSize = 14.sp)
+                        Text(
+                            entry.fileName,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            fontSize = 14.sp,
+                        )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ActionPill("点击打开") { onOpen(entry) }
@@ -180,19 +194,23 @@ fun SavedPackagesPage(
 }
 
 @Composable
-private fun ConfirmDialog(
+internal fun ConfirmDialog(
     title: String,
     message: String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    AlertDialog(
+    WindowDialog(
+        show = true,
+        title = title,
+        summary = message,
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(message) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("确认") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(text = "取消", onClick = onDismiss, modifier = Modifier.weight(1f))
+            TextButton(text = "确认", onClick = onConfirm, modifier = Modifier.weight(1f))
+        }
+    }
 }
 
 @Composable
@@ -202,12 +220,12 @@ private fun DataEmpty(message: String) {
             .fillMaxWidth()
             .height(55.dp)
             .clip(RoundedCornerShape(32.dp))
-            .background(CardWhite),
+            .background(MiuixTheme.colorScheme.surface),
         contentAlignment = Alignment.CenterStart,
     ) {
         Text(
             message,
-            color = Color(0xFF777777),
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             fontSize = 17.sp,
             modifier = Modifier.padding(start = 16.dp),
         )
@@ -217,10 +235,10 @@ private fun DataEmpty(message: String) {
 @Composable
 private fun CenteredDataEmpty(message: String) {
     androidx.compose.foundation.layout.Box(
-        modifier = Modifier.fillMaxWidth().height(752.dp),
+        modifier = Modifier.fillMaxWidth().height(620.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(message, color = Color(0xFF777777), fontSize = 18.sp)
+        Text(message, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 18.sp)
     }
 }
 
