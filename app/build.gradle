@@ -19,6 +19,13 @@ android {
         targetSdk = 37
         versionCode = 412001
         versionName = "4.120.1"
+        ndk {
+            // Release 交付按 ABI 构建：-PreleaseAbi=arm64-v8a|armeabi-v7a（AGP 9 已移除 splits.abi）
+            def releaseAbi = project.findProperty("releaseAbi")
+            if (releaseAbi) {
+                abiFilters releaseAbi
+            }
+        }
     }
 
     signingConfigs {
@@ -51,15 +58,6 @@ android {
 
     buildFeatures {
         compose = true
-    }
-
-    splits {
-        abi {
-            enable true
-            reset()
-            include "arm64-v8a", "armeabi-v7a"
-            universalApk false
-        }
     }
 }
 

@@ -146,7 +146,7 @@ adb -s 5b04d78f shell logcat -d -t 600 | rg 'FATAL EXCEPTION|AndroidRuntime'
 > 本项目注记（2026-08-24）：
 > - 版本：`versionName 4.120.1` / `versionCode 412001`（`app/build.gradle`）。
 > - native 库：`jniLibs/arm64-v8a` 与 `jniLibs/armeabi-v7a` 各含 `libpatcherV3.so`。
-> - 交付构建：`splits { abi }` 产出 `app-arm64-v8a-release.apk`、`app-armeabi-v7a-release.apk`，重命名为 `HyperMarket-4.120.1-android-<abi>.apk`。
+> - 交付构建：AGP 9 已移除 `splits.abi`，改用 `-PreleaseAbi=arm64-v8a|armeabi-v7a`（`ndk.abiFilters`）分别执行 `assembleRelease`，产出 `app-release.apk`，重命名为 `HyperMarket-4.120.1-android-<abi>.apk`。
 > - 发布工具：`gh release create`（gh v2.97.0，已认证 `yokinanya`）；SHA256 用 `Get-FileHash -Algorithm SHA256`。
 
 ## 提交约定
