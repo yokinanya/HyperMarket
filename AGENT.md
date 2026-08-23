@@ -135,6 +135,20 @@ adb -s 5b04d78f shell am start -n org.hyper.market/com.hyper.market.MainActivity
 adb -s 5b04d78f shell logcat -d -t 600 | rg 'FATAL EXCEPTION|AndroidRuntime'
 ```
 
+## Release 规则
+
+- Release 必须使用项目签名（`key.properties`），禁止回退到 Debug 签名。
+- 默认 Release 应生成 `arm64-v8a`、`armeabi-v7a` 两种交付包。
+- 交付文件名必须是 `HyperMarket-<版本号>-android-<abi>.apk`，不要把 Flutter 的 `app-release.apk` 当作交付文件。
+- 发布前先完成测试和构建，再提交、推送代码，最后创建或更新 Release 并上传文件；代码未推送成功前不得发布。
+- Release notes 要覆盖上一个 Release 到当前版本的变更，关联 Issue（修复用 `Fixes #编号`，其他用 `Refs #编号`），并为每个 APK 附上 SHA256。
+
+> 本项目注记（2026-08-24）：
+> - 版本：`versionName 4.120.1` / `versionCode 412001`（`app/build.gradle`）。
+> - native 库：`jniLibs/arm64-v8a` 与 `jniLibs/armeabi-v7a` 各含 `libpatcherV3.so`。
+> - 交付构建：`splits { abi }` 产出 `app-arm64-v8a-release.apk`、`app-armeabi-v7a-release.apk`，重命名为 `HyperMarket-4.120.1-android-<abi>.apk`。
+> - 发布工具：`gh release create`（gh v2.97.0，已认证 `yokinanya`）；SHA256 用 `Get-FileHash -Algorithm SHA256`。
+
 ## 提交约定
 
 - 不提交 `base.apk`、`base-reverse/`、Gradle/build 输出、安装包、截图、日志、本地 agent 元数据和 `key.properties`；`app/src/main/jniLibs/` 的 native 库必须保留。
