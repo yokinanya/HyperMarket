@@ -53,6 +53,3 @@ internal fun LaunchNotice(show: Boolean, onDismiss: () -> Unit) {
         TextButton(text = "知道了", onClick = onDismiss)
     }
 }
-
-internal fun settingsDestinationForRoute(route: String): SettingsDestination? =
-    SettingsDestination.values().firstOrNull { route == "settings-${it.name.lowercase()}" }

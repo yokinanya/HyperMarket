@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.market.api.XiaomiApiClient
@@ -63,6 +66,8 @@ fun TodayPage(
     apiClient: XiaomiApiClient,
     updateStore: UpdateStore,
     packageVisibilityRefresh: Int,
+    topPadding: Dp,
+    bottomBarHeight: Dp,
     onOpenDetail: (MarketAppInfo) -> Unit,
     onOpenArticle: (String) -> Unit,
     onOpenUpdates: () -> Unit,
@@ -126,11 +131,12 @@ fun TodayPage(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 12.dp, top = 38.dp, end = 12.dp),
-        contentPadding = PaddingValues(bottom = 12.dp),
+            .scrollEndHaptic()
+            .overScrollVertical()
+            .padding(start = 12.dp, end = 12.dp),
+        contentPadding = PaddingValues(top = topPadding, bottom = 12.dp + bottomBarHeight),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        item { PageTitle("今日", bottomPadding = 0.dp) }
         item {
             TodayUpdateCard(
                 state = updatesState,

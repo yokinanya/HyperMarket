@@ -3,21 +3,22 @@ package com.hyper.market
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -77,39 +78,69 @@ fun SettingsSubpage(
         SettingsAboutPage(onBack)
         return
     }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(0.dp),
-    ) {
-        item {
-            SubpageHeader(
-                destination.title,
-                onBack,
-                trailing = if (destination == SettingsDestination.HISTORY) {
-                    {
+    val scrollBehavior = MiuixScrollBehavior()
+    // 顶栏实时模糊（miuix-blur textureBlur，MGAide 同款）：API 33+ 启用，低版本降级纯色。
+    // TopAppBar（topBar 槽位）与内容盒（blurSource）是 Scaffold 的同级子节点，无自采样。
+    val blur = rememberBarBlur()
+    top.yukonga.miuix.kmp.basic.Scaffold(
+        topBar = {
+            TopAppBar(
+                title = destination.title,
+                scrollBehavior = scrollBehavior,
+                modifier = Modifier.barBlurMaterial(blur, MiuixTheme.colorScheme.surface),
+                color = if (blur.enabled) Color.Transparent else MiuixTheme.colorScheme.surface,
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            MiuixIcons.Back,
+                            contentDescription = "返回",
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                },
+                actions = {
+                    if (destination == SettingsDestination.HISTORY) {
                         IconButton(onClick = { confirmClearHistory = true }) {
                             Icon(
                                 MiuixIcons.Close,
                                 contentDescription = "清空记录",
                                 modifier = Modifier.size(22.dp),
+                                tint = MiuixTheme.colorScheme.onSurfaceContainer,
                             )
                         }
                     }
-                } else null,
+                },
             )
-        }
-        when (destination) {
-            SettingsDestination.IGNORED -> item { IgnoredUpdatesPage(updateStore) }
-            SettingsDestination.HISTORY -> item { UpdateHistoryPage(updateStore, historyVersion) }
-            SettingsDestination.SAVED -> item {
-                SavedPackagesPage(updateStore, onOpenSaved, onReinstallSaved)
-            }
-            SettingsDestination.DEVICE -> item {
-                DeviceProfilePage(profile, onProfileChange)
-            }
-            SettingsDestination.MANUAL -> item { ManualUpdateCard(apiClient, onInstall) }
-            SettingsDestination.INSTALLER -> item {
-                InstallerCard(settings, onSettingsChange)
+        },
+    ) { paddingValues ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .blurSource(blur)
+                .scrollEndHaptic()
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentPadding = PaddingValues(
+                start = 12.dp,
+                end = 12.dp,
+                top = paddingValues.calculateTopPadding() + 8.dp,
+                bottom = paddingValues.calculateBottomPadding() + 12.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            when (destination) {
+                SettingsDestination.IGNORED -> item { IgnoredUpdatesPage(updateStore) }
+                SettingsDestination.HISTORY -> item { UpdateHistoryPage(updateStore, historyVersion) }
+                SettingsDestination.SAVED -> item {
+                    SavedPackagesPage(updateStore, onOpenSaved, onReinstallSaved)
+                }
+                SettingsDestination.DEVICE -> item {
+                    DeviceProfilePage(profile, onProfileChange)
+                }
+                SettingsDestination.MANUAL -> item { ManualUpdateCard(apiClient, onInstall) }
+                SettingsDestination.INSTALLER -> item {
+                    InstallerCard(settings, onSettingsChange)
+                }
             }
         }
     }
@@ -124,27 +155,5 @@ fun SettingsSubpage(
                 confirmClearHistory = false
             },
         )
-    }
-}
-
-@Composable
-private fun SubpageHeader(title: String, onBack: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Box(modifier = Modifier.fillMaxWidth().height(38.dp)) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier.offset(y = 7.dp).size(48.dp),
-            ) {
-                Icon(
-                    MiuixIcons.Back,
-                    contentDescription = "返回",
-                    modifier = Modifier.size(24.dp),
-                )
-            }
-            Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp)) {
-                trailing?.invoke()
-            }
-        }
-        PageTitle(title, bottomPadding = 8.dp)
     }
 }

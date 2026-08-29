@@ -69,7 +69,7 @@ internal fun IntroductionSection(app: MarketAppInfo) {
     var expanded by remember(app) { mutableStateOf(false) }
     val content = app.getIntroduction().ifEmpty { "暂无应用介绍" }
     SectionLabel("应用介绍")
-    Card(modifier = Modifier.fillMaxWidth().animateContentSize(tween(260)), cornerRadius = 28.dp) {
+    Card(modifier = Modifier.fillMaxWidth().animateContentSize(folmeSpring(0.3f)), cornerRadius = 28.dp) {
         Column(modifier = Modifier.padding(22.dp)) {
             Text(
                 if (expanded) content else content.take(DETAIL_INTRO_LIMIT),

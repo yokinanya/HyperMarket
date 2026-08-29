@@ -41,7 +41,7 @@ internal fun OptionalDetailSections(
         (settings.showSameDeveloper && details.sameDeveloperApps.isNotEmpty())
     AnimatedVisibility(
         visible,
-        enter = fadeIn(tween(220)) + slideInVertically(tween(260)) { it / 8 },
+        enter = fadeIn(tween(220)) + slideInVertically(folmeSpring(0.3f)) { it / 8 },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             if (settings.showPromotions && details.promotions.isNotEmpty()) {

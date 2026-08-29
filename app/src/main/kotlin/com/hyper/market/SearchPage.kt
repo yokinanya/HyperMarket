@@ -13,6 +13,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.market.api.XiaomiApiClient
@@ -44,6 +47,8 @@ internal fun SearchPage(
     settings: AppSettings,
     apiClient: XiaomiApiClient,
     packageVisibilityRefresh: Int,
+    topPadding: Dp,
+    bottomBarHeight: Dp,
     onOpenDetail: (MarketAppInfo) -> Unit,
     onInstall: (MarketAppInfo) -> Unit,
     onOpenInstalled: (MarketAppInfo) -> Unit,
@@ -133,12 +138,15 @@ internal fun SearchPage(
     }
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize().padding(start = 12.dp, top = 38.dp, end = 12.dp),
-        contentPadding = PaddingValues(bottom = 12.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .scrollEndHaptic()
+            .overScrollVertical()
+            .padding(start = 12.dp, end = 12.dp),
+        contentPadding = PaddingValues(top = topPadding, bottom = 12.dp + bottomBarHeight),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            PageTitle("搜索", bottomPadding = SEARCH_TITLE_BOTTOM_PADDING)
             SearchField(
                 value = keyword,
                 editing = editing,
@@ -246,4 +254,3 @@ internal fun SearchPage(
 }
 
 private const val MAX_HISTORY = 8
-private val SEARCH_TITLE_BOTTOM_PADDING = 15.dp

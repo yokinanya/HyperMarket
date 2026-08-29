@@ -1,6 +1,7 @@
 package com.hyper.market
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
@@ -20,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.market.api.XiaomiApiClient
@@ -46,6 +50,8 @@ fun UpdatesPage(
     apiClient: XiaomiApiClient,
     updateStore: UpdateStore,
     packageVisibilityRefresh: Int = 0,
+    topPadding: Dp,
+    bottomBarHeight: Dp,
     onOpenDetail: (MarketAppInfo) -> Unit,
     onInstall: (MarketAppInfo) -> Unit,
     onInstallAll: (List<MarketAppInfo>) -> Unit,
@@ -90,7 +96,7 @@ fun UpdatesPage(
     }
     when (val current = state) {
         UpdatesState.Loading -> UpdatesLoading()
-        is UpdatesState.Failed -> UpdatesError(current.message) { refreshRequestId++ }
+        is UpdatesState.Failed -> UpdatesError(current.message, topPadding, bottomBarHeight) { refreshRequestId++ }
         is UpdatesState.Loaded -> PullToRefresh(
             isRefreshing = isRefreshing,
             refreshTexts = EMPTY_REFRESH_TEXTS,
@@ -102,6 +108,8 @@ fun UpdatesPage(
             UpdatesList(
                 current.updates,
                 settings.optimizeNames,
+                topPadding,
+                bottomBarHeight,
                 onOpenDetail,
                 onInstall,
                 onInstallAll,
@@ -123,6 +131,8 @@ fun UpdatesPage(
 private fun UpdatesList(
     updates: List<UpdateInfo>,
     optimizeNames: Boolean,
+    topPadding: Dp,
+    bottomBarHeight: Dp,
     onOpenDetail: (MarketAppInfo) -> Unit,
     onInstall: (MarketAppInfo) -> Unit,
     onInstallAll: (List<MarketAppInfo>) -> Unit,
@@ -135,12 +145,13 @@ private fun UpdatesList(
         state = listState,
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 12.dp, top = 38.dp, end = 12.dp),
-        contentPadding = PaddingValues(bottom = 12.dp),
+            .scrollEndHaptic()
+            .overScrollVertical()
+            .padding(start = 12.dp, end = 12.dp),
+        contentPadding = PaddingValues(top = topPadding, bottom = 12.dp + bottomBarHeight),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            PageTitle("更新")
             UpdateHeader(updates, onInstallAll)
         }
         if (refreshError != null) {
@@ -150,13 +161,15 @@ private fun UpdatesList(
             item { EmptyUpdates() }
         } else {
             items(updates, key = { it.app.packageName }) { update ->
-                UpdateCard(
-                    update = update,
-                    optimizeNames = optimizeNames,
-                    onOpenDetail = onOpenDetail,
-                    onInstall = onInstall,
-                    onIgnore = onIgnore,
-                )
+                Box(Modifier.animateItem(placementSpec = listSpring())) {
+                    UpdateCard(
+                        update = update,
+                        optimizeNames = optimizeNames,
+                        onOpenDetail = onOpenDetail,
+                        onInstall = onInstall,
+                        onIgnore = onIgnore,
+                    )
+                }
             }
         }
     }
@@ -204,9 +217,13 @@ private fun UpdatesLoading() {
 }
 
 @Composable
-private fun UpdatesError(message: String, onRetry: () -> Unit) {
-    PageColumn {
-        PageTitle("更新")
+private fun UpdatesError(message: String, topPadding: Dp, bottomBarHeight: Dp, onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = 12.dp, top = topPadding, end = 12.dp, bottom = 12.dp + bottomBarHeight),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
             Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("更新检查失败", fontSize = 20.sp)

@@ -78,27 +78,6 @@ private val ACTION_PILL_RADIUS = 28.dp
 private val ACTION_PILL_HEIGHT = 34.dp
 
 @Composable
-internal fun PageColumn(content: @Composable () -> Unit) {
-    androidx.compose.foundation.layout.Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) { content() }
-}
-
-@Composable
-internal fun PageTitle(text: String, bottomPadding: androidx.compose.ui.unit.Dp = 16.5.dp) {
-    Text(
-        text = text,
-        modifier = Modifier.padding(start = 13.75.dp, top = 14.dp, bottom = bottomPadding),
-        fontSize = 32.sp,
-        fontWeight = FontWeight.Normal,
-        color = MiuixTheme.colorScheme.onBackground,
-    )
-}
-
-@Composable
 internal fun AppIcon(label: String, color: Color, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
@@ -255,12 +234,7 @@ internal fun GradientFeatureCard(
 
 @Composable
 internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        fontSize = 14.sp,
-        color = MiuixTheme.colorScheme.onBackground,
-        modifier = modifier,
-    )
+    SmallTitle(text = text, modifier = modifier)
 }
 
 @Composable

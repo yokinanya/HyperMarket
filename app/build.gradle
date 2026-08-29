@@ -52,8 +52,9 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        // miuix-nav 0.9.4-rc01 以 JVM 21 字节码发布，本项目需对齐（AGP 9 内置 Kotlin 同步 jvmTarget）
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     buildFeatures {
@@ -93,8 +94,10 @@ dependencies {
     implementation "io.ktor:ktor-client-core:3.5.1"
     implementation "io.ktor:ktor-client-cio:3.5.1"
     implementation "top.yukonga.miuix.kmp:miuix-ui:0.9.3"
+    implementation "top.yukonga.miuix.kmp:miuix-blur:0.9.3"
     implementation "top.yukonga.miuix.kmp:miuix-preference:0.9.3"
     implementation "top.yukonga.miuix.kmp:miuix-icons:0.9.3"
+    implementation "top.yukonga.miuix.kmp:miuix-nav:0.9.4-rc01"
     implementation "io.coil-kt.coil3:coil-compose:3.5.0"
     implementation "io.coil-kt.coil3:coil-network-okhttp:3.5.0"
     implementation "org.lsposed.hiddenapibypass:hiddenapibypass:6.1"
