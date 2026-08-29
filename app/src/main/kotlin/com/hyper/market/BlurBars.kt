@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurBlendMode
 import top.yukonga.miuix.kmp.blur.BlurColors
@@ -52,10 +53,29 @@ internal fun rememberBarBlur(): BarBlur {
 internal fun Modifier.blurSource(blur: BarBlur): Modifier =
     if (blur.enabled) layerBackdrop(blur.backdrop!!) else this
 
-/** 模糊栏材质：enabled 时挂 textureBlur，低版本降级纯色底。 */
-internal fun Modifier.barBlurMaterial(blur: BarBlur, fallback: Color): Modifier =
+/** 模糊栏材质：enabled 时挂 textureBlur，低版本降级纯色底。colorsOverride 可换混合配色（如 background 页）。 */
+internal fun Modifier.barBlurMaterial(
+    blur: BarBlur,
+    fallback: Color,
+    colorsOverride: BlurColors? = null,
+): Modifier =
+    blurMaterial(blur, RectangleShape, fallback, colorsOverride = colorsOverride)
+
+/** 模糊材质（可指定形状/半径，卡片等毛玻璃用）：enabled 时挂 textureBlur，低版本降级纯色底。 */
+internal fun Modifier.blurMaterial(
+    blur: BarBlur,
+    shape: Shape,
+    fallback: Color,
+    blurRadius: Float = 25f,
+    colorsOverride: BlurColors? = null,
+): Modifier =
     if (blur.enabled) {
-        textureBlur(backdrop = blur.backdrop!!, shape = RectangleShape, colors = blur.colors!!)
+        textureBlur(
+            backdrop = blur.backdrop!!,
+            shape = shape,
+            blurRadius = blurRadius,
+            colors = colorsOverride ?: blur.colors!!,
+        )
     } else {
-        background(fallback)
+        background(fallback, shape)
     }

@@ -44,6 +44,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.SmallTitleDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -232,9 +233,16 @@ internal fun GradientFeatureCard(
     }
 }
 
+/** 容器自带 12dp 横向边距时的分区小标题内边距：16dp + 12dp = 28dp，与卡片文字对齐。 */
+internal val SectionLabelPaddedContainerMargin = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+
 @Composable
-internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
-    SmallTitle(text = text, modifier = modifier)
+internal fun SectionLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+    insideMargin: PaddingValues = SmallTitleDefaults.InsideMargin,
+) {
+    SmallTitle(text = text, modifier = modifier, insideMargin = insideMargin)
 }
 
 @Composable

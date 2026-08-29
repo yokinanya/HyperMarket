@@ -15,12 +15,12 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
 
 @Composable
-internal fun ConfigureSystemBars(isAboutPage: Boolean, isArticlePage: Boolean) {
+internal fun ConfigureSystemBars(isAboutPage: Boolean) {
     val view = LocalView.current
     val surface = MiuixTheme.colorScheme.surface
     val background = MiuixTheme.colorScheme.background
-    val barColor = if (isAboutPage || isArticlePage) Color.Transparent else surface
-    val lightSystemBars = if (isAboutPage || isArticlePage) {
+    val barColor = if (isAboutPage) Color.Transparent else surface
+    val lightSystemBars = if (isAboutPage) {
         background.luminance() > 0.5f
     } else {
         surface.luminance() > 0.5f
@@ -28,7 +28,7 @@ internal fun ConfigureSystemBars(isAboutPage: Boolean, isArticlePage: Boolean) {
     SideEffect {
         val window = (view.context as? Activity)?.window ?: return@SideEffect
         if (Build.VERSION.SDK_INT < 35) {
-            setLegacyBarColors(window, barColor, if (isArticlePage) background else barColor)
+            setLegacyBarColors(window, barColor, barColor)
         }
         if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = !isAboutPage
         val controller = WindowCompat.getInsetsController(window, view)

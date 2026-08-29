@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.market.model.DetailVideo
@@ -42,7 +43,7 @@ internal fun PreviewSection(
     videos: List<DetailVideo>,
     onSaveImage: (String) -> Unit,
 ) {
-    SectionLabel("预览")
+    SectionLabel("预览", insideMargin = SectionLabelPaddedContainerMargin)
     if (urls.isEmpty() && videos.isEmpty()) {
         Text(
             "暂无预览",
@@ -68,23 +69,24 @@ internal fun PreviewSection(
 internal fun IntroductionSection(app: MarketAppInfo) {
     var expanded by remember(app) { mutableStateOf(false) }
     val content = app.getIntroduction().ifEmpty { "暂无应用介绍" }
-    SectionLabel("应用介绍")
-    Card(modifier = Modifier.fillMaxWidth().animateContentSize(folmeSpring(0.3f)), cornerRadius = 28.dp) {
-        Column(modifier = Modifier.padding(22.dp)) {
+    SectionLabel("应用介绍", insideMargin = SectionLabelPaddedContainerMargin)
+    // 卡片默认圆角 + 16dp 内边距，正文 15sp（对齐设置页文本体系）。
+    Card(modifier = Modifier.fillMaxWidth().animateContentSize(folmeSpring(0.3f))) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 if (expanded) content else content.take(DETAIL_INTRO_LIMIT),
-                fontSize = 18.sp,
+                fontSize = 15.sp,
                 color = MiuixTheme.colorScheme.onSurface,
             )
             if (content.length > DETAIL_INTRO_LIMIT) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     horizontalArrangement = Arrangement.End,
                 ) {
                     Text(
                         if (expanded) "收起" else "更多",
                         color = MiuixTheme.colorScheme.primary,
-                        fontSize = 17.sp,
+                        fontSize = 14.sp,
                         modifier = Modifier.clickable { expanded = !expanded },
                     )
                 }
@@ -96,9 +98,9 @@ internal fun IntroductionSection(app: MarketAppInfo) {
 @Composable
 internal fun DetailInfoSection(app: MarketAppInfo, privacyUrl: String) {
     val context = LocalContext.current
-    SectionLabel("应用信息")
-    Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
-        Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    SectionLabel("应用信息", insideMargin = SectionLabelPaddedContainerMargin)
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             DetailInfoRow("包名", app.getPackageName())
             DetailInfoRow("版本", app.getVersionName().ifEmpty { "—" })
             DetailInfoRow("更新时间", detailFormatDate(app.getUpdateTime()))
@@ -110,8 +112,8 @@ internal fun DetailInfoSection(app: MarketAppInfo, privacyUrl: String) {
                 },
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("隐私政策", fontSize = 16.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                Text("点击打开", fontSize = 16.sp, color = MiuixTheme.colorScheme.primary)
+                Text("隐私政策", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                Text("点击打开", fontSize = 14.sp, color = MiuixTheme.colorScheme.primary)
             }
         }
     }
@@ -120,17 +122,17 @@ internal fun DetailInfoSection(app: MarketAppInfo, privacyUrl: String) {
 @Composable
 private fun DetailInfoRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 16.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-        Text(value, fontSize = 16.sp, color = MiuixTheme.colorScheme.onSurface, maxLines = 1)
+        Text(label, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        Text(value, fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface, maxLines = 1)
     }
 }
 
 @Composable
-internal fun DetailAppIcon(app: MarketAppInfo) {
+internal fun DetailAppIcon(app: MarketAppInfo, iconSize: Dp = 88.dp) {
     if (app.getIconUrl().isNotBlank()) {
-        RemoteAppIcon(app.getIconUrl(), app.getDisplayName(), Modifier.size(96.dp))
+        RemoteAppIcon(app.getIconUrl(), app.getDisplayName(), Modifier.size(iconSize))
     } else {
-        InstalledAppIcon(app.getPackageName(), app.getDisplayName(), Modifier.size(96.dp))
+        InstalledAppIcon(app.getPackageName(), app.getDisplayName(), Modifier.size(iconSize))
     }
 }
 

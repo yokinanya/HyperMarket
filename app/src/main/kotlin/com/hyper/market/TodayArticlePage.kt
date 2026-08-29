@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,12 +13,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,7 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.market.api.XiaomiApiClient
@@ -40,9 +44,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
+/**
+ * 今日专题（广告）详情页：以设置子页面标准打底——
+ * miuix Scaffold + TopAppBar（实时模糊，MGAide 同款）+ LazyColumn（overScroll/haptic/nestedScroll）。
+ * TopAppBar（topBar 槽位）与内容盒（blurSource）是 Scaffold 的同级子节点，无自采样。
+ */
 @Composable
 fun TodayArticlePage(
     resourceId: String,
@@ -62,36 +71,83 @@ fun TodayArticlePage(
             error = exception.message ?: "专题内容加载失败"
         }
     }
-    when {
-        article != null -> ArticleLoadedPage(article!!, onOpenDetail, onInstall, onBack)
-        else -> ArticleLoadingPage(error, onBack) { reloadKey++ }
+    val scrollBehavior = MiuixScrollBehavior()
+    val blur = rememberBarBlur()
+    top.yukonga.miuix.kmp.basic.Scaffold(
+        topBar = {
+            TopAppBar(
+                title = article?.title?.takeIf { it.isNotBlank() } ?: "今日专题",
+                scrollBehavior = scrollBehavior,
+                modifier = Modifier.barBlurMaterial(blur, MiuixTheme.colorScheme.surface),
+                color = if (blur.enabled) Color.Transparent else MiuixTheme.colorScheme.surface,
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            MiuixIcons.Back,
+                            contentDescription = "返回",
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                },
+            )
+        },
+    ) { paddingValues ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .blurSource(blur)
+                .scrollEndHaptic()
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentPadding = PaddingValues(
+                start = 12.dp,
+                end = 12.dp,
+                top = paddingValues.calculateTopPadding() + 8.dp,
+                bottom = paddingValues.calculateBottomPadding() + 12.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val loaded = article
+            when {
+                loaded != null -> {
+                    item(key = "hero") { ArticleHero(loaded) }
+                    val segments = articleSegments(loaded)
+                    items(segments.size) { index ->
+                        val segment = segments[index]
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            segment.text?.let { ArticleText(it) }
+                            segment.imageUrl?.let { ArticleImage(it, loaded.title) }
+                        }
+                    }
+                    items(loaded.apps.size) { index ->
+                        val app = loaded.apps[index]
+                        ArticleAppCard(app, onOpenDetail, onInstall)
+                    }
+                    item(key = "tail") { Spacer(Modifier.height(4.dp)) }
+                }
+                error != null -> item(key = "error") {
+                    ArticleErrorState(error.orEmpty()) { reloadKey++ }
+                }
+                else -> item(key = "loading") {
+                    Text(
+                        "加载中…",
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
+/** 头图卡片：圆角 24dp，底部渐变压暗 + 应用信息叠层（返回键由顶栏提供，不再自绘）。 */
 @Composable
-private fun ArticleLoadedPage(
-    article: TodayArticle,
-    onOpenDetail: (MarketAppInfo) -> Unit,
-    onInstall: (MarketAppInfo) -> Unit,
-    onBack: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-    ) {
-        ArticleHero(article, onBack)
-        ArticleBody(article, onOpenDetail, onInstall)
-    }
-}
-
-@Composable
-private fun ArticleHero(article: TodayArticle, onBack: () -> Unit) {
-    val backIconTint = if (MiuixTheme.colorScheme.background.luminance() < 0.5f) {
-        Color.White
-    } else {
-        Color.Black
-    }
+private fun ArticleHero(article: TodayArticle) {
     Box(
-        modifier = Modifier.fillMaxWidth().height(articleHeroHeight(article)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(articleHeroHeight(article))
+            .clip(RoundedCornerShape(24.dp)),
     ) {
         if (article.headerImageUrl.isNotBlank()) {
             RemoteImage(article.headerImageUrl, article.title, Modifier.fillMaxSize())
@@ -99,20 +155,6 @@ private fun ArticleHero(article: TodayArticle, onBack: () -> Unit) {
             Box(Modifier.fillMaxSize().background(ARTICLE_FALLBACK_GRADIENT))
         }
         Box(modifier = Modifier.fillMaxSize().background(ARTICLE_HERO_GRADIENT))
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 12.dp, top = 48.dp)
-                .size(56.dp),
-        ) {
-            Icon(
-                MiuixIcons.Back,
-                contentDescription = "返回",
-                modifier = Modifier.size(38.dp),
-                tint = backIconTint,
-            )
-        }
         ArticleHeroFooter(article, Modifier.align(Alignment.BottomStart))
     }
 }
@@ -125,7 +167,6 @@ private fun ArticleHeroFooter(article: TodayArticle, modifier: Modifier) {
             .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(article.title, color = Color.White, fontSize = 18.sp, maxLines = 2)
         if (article.apps.size == 1) {
             val app = article.apps.first()
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -151,24 +192,6 @@ private fun ArticleHeroFooter(article: TodayArticle, modifier: Modifier) {
 }
 
 @Composable
-private fun ArticleBody(article: TodayArticle, onOpenDetail: (MarketAppInfo) -> Unit, onInstall: (MarketAppInfo) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MiuixTheme.colorScheme.background)
-            .padding(horizontal = 24.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-    ) {
-        articleSegments(article).forEach { segment ->
-            segment.text?.let { ArticleText(it) }
-            segment.imageUrl?.let { ArticleImage(it, article.title) }
-        }
-        article.apps.forEach { app -> ArticleAppCard(app, onOpenDetail, onInstall) }
-        Spacer(Modifier.height(8.dp))
-    }
-}
-
-@Composable
 private fun ArticleText(text: String) {
     Text(text, fontSize = 18.sp, lineHeight = 29.sp, color = MiuixTheme.colorScheme.onSurface)
 }
@@ -187,7 +210,7 @@ private fun ArticleImage(url: String, title: String) {
 
 @Composable
 private fun ArticleAppCard(app: MarketAppInfo, onOpenDetail: (MarketAppInfo) -> Unit, onInstall: (MarketAppInfo) -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 24.dp) {
+    Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(18.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -203,35 +226,11 @@ private fun ArticleAppCard(app: MarketAppInfo, onOpenDetail: (MarketAppInfo) -> 
 }
 
 @Composable
-private fun ArticleLoadingPage(
-    error: String?,
-    onBack: () -> Unit,
-    onRetry: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        ArticleHeader("今日专题", onBack)
-        if (error == null) {
-            Text(
-                "加载中…",
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.padding(12.dp),
-            )
-        } else {
-            ArticleErrorState(error, onRetry)
-        }
-    }
-}
-
-@Composable
-private fun ArticleHeader(title: String, onBack: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack, modifier = Modifier.size(56.dp)) {
-            Icon(MiuixIcons.Back, contentDescription = "返回", modifier = Modifier.size(38.dp))
-        }
-        Text(title, fontSize = 26.sp, maxLines = 2)
+private fun ArticleErrorState(message: String, onRetry: () -> Unit) {
+    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("专题内容加载失败", color = MiuixTheme.colorScheme.error, fontSize = 20.sp)
+        Text(message, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 15.sp)
+        ActionPill("重试", onRetry)
     }
 }
 
@@ -284,15 +283,6 @@ private fun cleanArticleBody(html: String): String {
         .replace("\uFFFC", "")
         .replace(EXCESS_NEWLINE_PATTERN, "\n\n")
         .trim()
-}
-
-@Composable
-private fun ArticleErrorState(message: String, onRetry: () -> Unit) {
-    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("专题内容加载失败", color = MiuixTheme.colorScheme.error, fontSize = 20.sp)
-        Text(message, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 15.sp)
-        ActionPill("重试", onRetry)
-    }
 }
 
 private const val MAX_ARTICLE_APPS = 3

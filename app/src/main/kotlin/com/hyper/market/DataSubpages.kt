@@ -34,11 +34,11 @@ fun IgnoredUpdatesPage(store: UpdateStore) {
     val permanent = entries.filter { it.permanent }
     val temporary = entries.filterNot { it.permanent }
     Column {
-        SectionLabel("永久忽略更新", Modifier.padding(start = 16.dp))
+        SectionLabel("永久忽略更新", insideMargin = SectionLabelPaddedContainerMargin)
         Spacer(Modifier.height(6.dp))
         IgnoredGroup(permanent, store) { entries = store.ignoredUpdates() }
         Spacer(Modifier.height(12.dp))
-        SectionLabel("仅忽略本次更新", Modifier.padding(start = 16.dp))
+        SectionLabel("仅忽略本次更新", insideMargin = SectionLabelPaddedContainerMargin)
         Spacer(Modifier.height(6.dp))
         IgnoredGroup(temporary, store) { entries = store.ignoredUpdates() }
     }
@@ -91,7 +91,7 @@ fun UpdateHistoryPage(store: UpdateStore, refreshKey: Any? = null) {
         entries
             .groupBy { historyDateLabel(it.installedAt) }
             .forEach { (date, dayEntries) ->
-                SectionLabel(date, Modifier.padding(start = 16.dp))
+                SectionLabel(date, insideMargin = SectionLabelPaddedContainerMargin)
                 Spacer(Modifier.height(6.dp))
                 dayEntries.forEach { entry -> HistoryCard(entry) }
             }

@@ -119,7 +119,8 @@ fun DetailPage(
                 .verticalScroll(scrollState)
                 .padding(top = paddingValues.calculateTopPadding() + 12.dp, bottom = paddingValues.calculateBottomPadding() + 24.dp)
                 .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            // 分区间距与设置页卡片节奏一致（12dp）。
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             DetailHeader(detail, displayName, actionState, onInstall, onOpenInstalled)
             DetailStats(detail)
@@ -161,7 +162,8 @@ private fun DetailHeader(
         Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
             Text(
                 displayName,
-                style = detailHeaderTextStyle(24.sp),
+                // 字号对齐设置页标题体系上限（20sp），不再用 24sp 大字。
+                style = detailHeaderTextStyle(20.sp),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -193,14 +195,20 @@ private fun DetailStats(app: MarketAppInfo) {
         formatSize(app.getApkSize()) to "大小",
         app.getAgeClassification().ifEmpty { "—" } to "年龄分级",
     )
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        stats.forEachIndexed { index, stat ->
-            if (index > 0) {
-                Spacer(
-                    Modifier.width(1.dp).height(64.dp).background(MiuixTheme.colorScheme.dividerLine),
-                )
+    // 卡片化 + 字号对齐设置页（数值 17sp=行标题、标签 14sp=行摘要）。
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            stats.forEachIndexed { index, stat ->
+                if (index > 0) {
+                    Spacer(
+                        Modifier.width(1.dp).height(36.dp).background(MiuixTheme.colorScheme.dividerLine),
+                    )
+                }
+                StatItem(stat.first, stat.second)
             }
-            StatItem(stat.first, stat.second)
         }
     }
 }
@@ -208,7 +216,7 @@ private fun DetailStats(app: MarketAppInfo) {
 @Composable
 private fun RowScope.StatItem(value: String, label: String) {
     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontSize = 24.sp, color = MiuixTheme.colorScheme.onBackground, maxLines = 1)
+        Text(value, fontSize = 17.sp, color = MiuixTheme.colorScheme.onSurface, maxLines = 1)
         Text(label, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, maxLines = 1)
     }
 }

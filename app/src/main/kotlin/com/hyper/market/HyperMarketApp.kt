@@ -183,13 +183,9 @@ fun HyperMarketApp(
     val stableOnBack = remember { { popNav() } }
     val topNav = backStack.lastOrNull()
     val isAboutPage = topNav is MarketNav.Settings && topNav.destination == SettingsDestination.ABOUT
-    val isArticlePage = topNav is MarketNav.Article
     val animationsEnabled = systemAnimationsEnabled()
-    val aboutBackgroundAlpha by animateFloatAsState(
-        targetValue = if (isAboutPage) 1f else 0f,
-        animationSpec = if (animationsEnabled) tween(320) else snap(),
-        label = "about-background-alpha",
-    )
+    // 关于页动态渐变已移入 SettingsAboutPage 自身（同时作为其毛玻璃卡片的 blur 采样层），
+    // 根级不再渲染 AboutGradientBackground。
     LaunchedEffect(operation) {
         val message = operation ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(
@@ -204,21 +200,12 @@ fun HyperMarketApp(
         val indicationColor = MiuixTheme.colorScheme.onBackground
         val miuixIndication = remember(indicationColor) { MiuixIndication(color = indicationColor) }
         CompositionLocalProvider(LocalIndication provides miuixIndication) {
-        ConfigureSystemBars(isAboutPage, isArticlePage)
+        ConfigureSystemBars(isAboutPage)
         Box(
             modifier = Modifier.fillMaxSize(),
         ) {
-            if (aboutBackgroundAlpha > 0f) {
-                AboutGradientBackground(
-                    Modifier.fillMaxSize().graphicsLayer { alpha = aboutBackgroundAlpha },
-                )
-            }
             Scaffold(
-                containerColor = if (isAboutPage || isArticlePage) {
-                    Color.Transparent
-                } else {
-                    MiuixTheme.colorScheme.surface
-                },
+                containerColor = MiuixTheme.colorScheme.surface,
                 // 底栏不在根级 bottomBar 槽位渲染：进子页面时槽位瞬间清空会让底栏突兀消失。
                 // 它属于主 Tab 页场景本身（参考项目 MiuixMainContent 的标准结构），随页面过渡一起进出场，
                 // 见 HyperMarketContent 主 Tab 分支。

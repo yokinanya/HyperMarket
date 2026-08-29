@@ -22,6 +22,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.window.WindowDialog
 
 @Composable
@@ -93,29 +94,14 @@ private fun selectProfileSource(
 
 @Composable
 private fun ProfileSourceSelector(source: String, onSourceSelected: (String) -> Unit) {
-    var showDialog by remember { mutableStateOf(false) }
-    val label = when (source) {
-        "custom" -> "自定义"
-        "preset" -> "预设信息"
-        else -> "从设备获取"
-    }
-    Box(modifier = Modifier.fillMaxWidth()) {
-        ArrowPreference(
-            title = "信息来源",
-            endActions = { Text(label) },
-            onClick = { showDialog = true },
-        )
-        if (showDialog) {
-            ProfileSourceDialog(
-                source = source,
-                onDismiss = { showDialog = false },
-                onSelected = {
-                    onSourceSelected(it)
-                    showDialog = false
-                },
-            )
-        }
-    }
+    // miuix 官方下拉选择组件（示例 DropdownSection 标准），替代自绘展开菜单。
+    val options = listOf("custom" to "自定义", "preset" to "预设信息", "device" to "从设备获取")
+    OverlayDropdownPreference(
+        title = "信息来源",
+        items = options.map { it.second },
+        selectedIndex = options.indexOfFirst { it.first == source }.coerceAtLeast(0),
+        onSelectedIndexChange = { index -> onSourceSelected(options[index].first) },
+    )
 }
 
 @Composable

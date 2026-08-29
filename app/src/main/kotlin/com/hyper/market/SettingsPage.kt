@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 @Composable
@@ -120,11 +121,15 @@ private fun GeneralSettings(
     onSettingsChange: (AppSettings) -> Unit,
     onOpenDestination: (SettingsDestination) -> Unit,
 ) {
-    var showStartPageDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
     SettingCard {
-        SettingHomeRow(settings.startPage) {
-            showStartPageDialog = true
-        }
+        // miuix 官方下拉选择组件（示例 DropdownSection 标准），替代自绘展开菜单。
+        OverlayDropdownPreference(
+            title = "首页",
+            summary = "启动时打开的页面",
+            items = listOf("今日", "更新", "搜索"),
+            selectedIndex = settings.startPage.coerceIn(0, 2),
+            onSelectedIndexChange = { page -> onSettingsChange(settings.copy(startPage = page)) },
+        )
         SettingSwitchRow("优化应用名称", "移除推广语，名称本身含横线的可能会误裁", settings.optimizeNames) {
             onSettingsChange(settings.copy(optimizeNames = it))
         }
@@ -138,16 +143,6 @@ private fun GeneralSettings(
             onSettingsChange(settings.copy(xiaomiIslandOptimization = it))
         }
         SettingLinkRow(SettingsDestination.ABOUT, onOpenDestination)
-    }
-    if (showStartPageDialog) {
-        StartPageDialog(
-            selectedPage = settings.startPage,
-            onDismiss = { showStartPageDialog = false },
-            onSelected = { page ->
-                showStartPageDialog = false
-                onSettingsChange(settings.copy(startPage = page))
-            },
-        )
     }
 }
 
@@ -181,19 +176,4 @@ private fun SettingLinkRow(destination: SettingsDestination, onOpen: (SettingsDe
 @Composable
 private fun SettingLinkRow(title: String, summary: String, onClick: () -> Unit) {
     ArrowPreference(title = title, summary = summary, onClick = onClick)
-}
-
-@Composable
-private fun SettingHomeRow(startPage: Int, onClick: () -> Unit) {
-    val value = when (startPage) {
-        1 -> "更新"
-        2 -> "搜索"
-        else -> "今日"
-    }
-    ArrowPreference(
-        title = "首页",
-        summary = "启动时打开的页面",
-        endActions = { Text(value) },
-        onClick = onClick,
-    )
 }

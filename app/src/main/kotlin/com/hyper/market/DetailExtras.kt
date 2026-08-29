@@ -43,7 +43,7 @@ internal fun OptionalDetailSections(
         visible,
         enter = fadeIn(tween(220)) + slideInVertically(folmeSpring(0.3f)) { it / 8 },
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (settings.showPromotions && details.promotions.isNotEmpty()) {
                 PromotionSection(details.promotions)
             }
@@ -60,7 +60,7 @@ internal fun OptionalDetailSections(
 @Composable
 private fun PromotionSection(promotions: List<DetailPromotion>) {
     val context = LocalContext.current
-    SectionLabel("优惠活动")
+    SectionLabel("优惠活动", insideMargin = SectionLabelPaddedContainerMargin)
     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(promotions) { promotion ->
             Card(
@@ -69,7 +69,6 @@ private fun PromotionSection(promotions: List<DetailPromotion>) {
                         context.startActivity(Intent(Intent.ACTION_VIEW, promotion.jumpUrl.toUri()))
                     }
                 },
-                cornerRadius = 26.dp,
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (promotion.previewImageUrl.isNotBlank()) {
@@ -79,11 +78,11 @@ private fun PromotionSection(promotions: List<DetailPromotion>) {
                             Modifier.fillMaxWidth().height(150.dp),
                         )
                     }
-                    Text(promotion.title.ifBlank { promotion.activityTag }, fontSize = 18.sp)
+                    Text(promotion.title.ifBlank { promotion.activityTag }, fontSize = 15.sp)
                     Text(
                         promotion.description,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         maxLines = 3,
                     )
                 }
@@ -94,17 +93,17 @@ private fun PromotionSection(promotions: List<DetailPromotion>) {
 
 @Composable
 private fun CommentSection(details: MarketAppDetails) {
-    SectionLabel("评论与评分")
-    Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 26.dp) {
-        Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    SectionLabel("评论与评分", insideMargin = SectionLabelPaddedContainerMargin)
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             details.comments.take(MAX_DETAIL_COMMENTS).forEach { comment ->
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         "${comment.userName.ifBlank { "用户" }}  ${formatCommentScore(comment.score)}",
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     )
-                    Text(comment.content, fontSize = 17.sp, color = MiuixTheme.colorScheme.onSurface)
+                    Text(comment.content, fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface)
                 }
             }
         }
@@ -116,17 +115,16 @@ private fun RelatedAppsSection(
     apps: List<MarketAppInfo>,
     onOpenDetail: (MarketAppInfo) -> Unit,
 ) {
-    SectionLabel("同开发者应用")
+    SectionLabel("同开发者应用", insideMargin = SectionLabelPaddedContainerMargin)
     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(apps) { app ->
             Card(
                 modifier = Modifier.width(210.dp).clickable { onOpenDetail(app) },
-                cornerRadius = 24.dp,
             ) {
-                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    DetailAppIcon(app)
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    DetailAppIcon(app, 48.dp)
                     Column(modifier = Modifier.padding(start = 12.dp)) {
-                        Text(app.displayName, fontSize = 17.sp, maxLines = 1)
+                        Text(app.displayName, fontSize = 15.sp, maxLines = 1)
                         Text(
                             app.publisherName,
                             fontSize = 14.sp,
