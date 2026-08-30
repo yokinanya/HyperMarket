@@ -14,8 +14,11 @@ package com.hyper.market
 import android.content.Intent
 import androidx.core.net.toUri
 import android.widget.ImageView
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -365,35 +368,42 @@ internal fun SettingsAboutPage(onBack: () -> Unit) {
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
-                        if (creditsExpanded) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            AboutCredits.forEach { credit ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 2.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = credit.name,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MiuixTheme.colorScheme.primary,
-                                        modifier = Modifier.clickable {
-                                            context.startActivity(
-                                                Intent(Intent.ACTION_VIEW, credit.url.toUri()),
-                                            )
-                                        },
-                                    )
-                                    Text(
-                                        text = credit.author,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantActions,
-                                    )
+                        // 展开收起动画 = NexioSchedule 更新日志卡同款：AnimatedVisibility 纵向展开/收起。
+                        AnimatedVisibility(
+                            visible = creditsExpanded,
+                            enter = expandVertically(),
+                            exit = shrinkVertically(),
+                        ) {
+                            Column {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                AboutCredits.forEach { credit ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 2.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = credit.name,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MiuixTheme.colorScheme.primary,
+                                            modifier = Modifier.clickable {
+                                                context.startActivity(
+                                                    Intent(Intent.ACTION_VIEW, credit.url.toUri()),
+                                                )
+                                            },
+                                        )
+                                        Text(
+                                            text = credit.author,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(12.dp))
                                 }
-                                Spacer(modifier = Modifier.height(12.dp))
                             }
                         }
                     }

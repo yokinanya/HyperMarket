@@ -1,5 +1,10 @@
 package com.hyper.market
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -29,6 +35,10 @@ import androidx.compose.ui.unit.sp
 import com.hyper.market.model.MarketAppInfo
 import com.hyper.market.model.UpdateInfo
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private val UpdateCardBottomPadding = 17.dp
@@ -76,6 +86,13 @@ internal fun UpdateCard(
     val displayName = optimizedAppName(app.displayName, optimizeNames)
     val installed = update.installedPackage
     var expanded by remember(app.packageName) { mutableStateOf(false) }
+    // 展开收起动画 = NexioSchedule 更新日志卡同款：箭头 tween(200) ±90° 旋转 +
+    // AnimatedVisibility(expandVertically/shrinkVertically) 纵向展开收起。
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 90f else -90f,
+        animationSpec = tween(durationMillis = 200),
+        label = "updateCardChevron",
+    )
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -114,27 +131,45 @@ internal fun UpdateCard(
             }
             InstallActionPill(app, "更新", onInstall)
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
         ) {
-            Text(
-                app.changeLog,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                style = compactTextStyle(14.sp, 16.sp),
-                maxLines = if (expanded) 4 else 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            InlineTextAction(
-                label = if (expanded) "收起" else "展开",
-                onClick = { expanded = !expanded },
-            )
-        }
-        if (expanded) {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                InlineTextAction("忽略本次", onClick = { onIgnore(update, false) })
-                InlineTextAction("永久忽略", onClick = { onIgnore(update, true) })
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    app.changeLog,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = compactTextStyle(14.sp, 16.sp),
+                    maxLines = if (expanded) 4 else 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = MiuixIcons.ChevronForward,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .size(16.dp)
+                        .graphicsLayer { rotationZ = chevronRotation },
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                )
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    InlineTextAction("忽略本次", onClick = { onIgnore(update, false) })
+                    InlineTextAction("永久忽略", onClick = { onIgnore(update, true) })
+                }
             }
         }
         }
