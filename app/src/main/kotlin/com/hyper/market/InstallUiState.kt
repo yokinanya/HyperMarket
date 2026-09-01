@@ -1,5 +1,7 @@
 package com.hyper.market
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.snap
@@ -7,27 +9,33 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hyper.market.installer.DownloadNotification
 import com.hyper.market.installer.DownloadNotificationReceiver
 import com.hyper.market.installer.DownloadTaskRegistry
 import com.hyper.market.model.MarketAppInfo
@@ -37,9 +45,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.window.WindowDialog
 
@@ -170,53 +177,98 @@ internal fun InstallActionPill(
     }
     val state by stateFlow.collectAsState(initial = null)
     val activeState = state
-    if (activeState?.phase?.isActive() == true) {
-        InstallProgressPill(activeState) { handleInstallClick(context, activeState, app, onInstall) }
-        return
+    val active = activeState?.phase?.isActive() == true
+    // 记住最近一次活动状态：取消/完成后圆球能沿变形动画淡出，而不是瞬间消失。
+    var lastActiveState by remember { mutableStateOf<InstallUiState?>(null) }
+    if (activeState != null) lastActiveState = activeState
+    val shownState = lastActiveState
+
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val idleWidth = remember(idleLabel, density.fontScale) {
+        with(density) {
+            textMeasurer
+                .measure(AnnotatedString(idleLabel), style = installLabelStyle, maxLines = 1)
+                .size
+                .width
+                .toDp() + 32.dp
+        }
     }
-    Button(
-        onClick = { handleInstallClick(context, state, app, onInstall) },
-        cornerRadius = 28.dp,
-        minWidth = 0.dp,
-        minHeight = 34.dp,
-        colors = ButtonDefaults.buttonColorsPrimary(),
-        insideMargin = PaddingValues(horizontal = 16.dp, vertical = 7.dp),
+    // 一体变形组件：同一个表面同时驱动宽度、底色与内容透明度，
+    // 50% 圆角在宽态是胶囊、收窄到 34dp 时恰为正圆，形状全程连续无跳变。
+    val animationsEnabled = systemAnimationsEnabled()
+    val width by animateDpAsState(
+        targetValue = if (active) 34.dp else idleWidth,
+        animationSpec = if (animationsEnabled) tween(200) else snap(),
+        label = "installMorphWidth",
+    )
+    val surfaceColor by animateColorAsState(
+        targetValue = if (active) Color.Transparent else MiuixTheme.colorScheme.primary,
+        animationSpec = if (animationsEnabled) tween(200) else snap(),
+        label = "installMorphColor",
+    )
+    val morphT by animateFloatAsState(
+        targetValue = if (active) 1f else 0f,
+        animationSpec = if (animationsEnabled) tween(200) else snap(),
+        label = "installMorphContent",
+    )
+
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(34.dp)
+            .clip(CircleShape)
+            .background(surfaceColor)
+            .clickable(enabled = !active) { handleInstallClick(context, state, app, onInstall) },
+        contentAlignment = Alignment.Center,
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(state?.label(idleLabel) ?: idleLabel, style = installLabelStyle)
+        Text(
+            idleLabel,
+            style = installLabelStyle,
+            color = MiuixTheme.colorScheme.onPrimary,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier
+                .wrapContentSize(Alignment.Center, unbounded = true)
+                .graphicsLayer { alpha = 1f - morphT },
+        )
+        if (shownState != null && morphT > 0f) {
+            Box(
+                modifier = Modifier.graphicsLayer { alpha = morphT },
+                contentAlignment = Alignment.Center,
+            ) {
+                InstallProgressCircle(shownState) {
+                    handleInstallClick(context, shownState, app, onInstall)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun InstallProgressPill(state: InstallUiState, onClick: () -> Unit) {
-    val label = state.label("")
+private fun InstallProgressCircle(state: InstallUiState, onClick: () -> Unit) {
     val target = state.fillProgress()
     val animationSpec = if (systemAnimationsEnabled()) tween<Float>(300) else snap()
     val progress by animateFloatAsState(target, animationSpec, label = "download-fill")
     val enabled = state.phase == InstallPhase.DOWNLOADING || state.phase == InstallPhase.PAUSED
-    BoxWithConstraints(
-        modifier = Modifier.width(InstallPillWidth).height(32.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(MiuixTheme.colorScheme.secondaryContainer)
-            .clickable(enabled = enabled, onClick = onClick),
+    Box(
+        modifier = Modifier.size(34.dp),
+        contentAlignment = Alignment.Center,
     ) {
+        // 描边进度环（miuix 官方 CircularProgressIndicator：轨道 secondaryContainer + primary 弧）。
+        CircularProgressIndicator(
+            progress = progress,
+            size = 34.dp,
+            strokeWidth = 2.dp,
+        )
+        // 中心圆角矩形（应用商店下载标记）：按压反馈精确到方形（裁剪到 3dp 圆角内），
+        // 点击取消下载。
         Box(
             modifier = Modifier
-                .align(Alignment.CenterStart)
-                .fillMaxHeight()
-                .width(maxWidth * progress)
-                .clipToBounds()
-                .background(MiuixTheme.colorScheme.primary),
-        )
-        Text(
-            label,
-            style = installLabelStyle,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.align(Alignment.Center).fillMaxWidth(),
+                .size(12.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(MiuixTheme.colorScheme.primary)
+                .clickable(enabled = enabled, onClick = onClick),
         )
     }
 }
@@ -228,28 +280,15 @@ private fun handleInstallClick(
     onInstall: (MarketAppInfo) -> Unit,
 ) {
     when (state?.phase) {
-        InstallPhase.DOWNLOADING -> {
-            DownloadTaskRegistry.applyCurrent(DownloadNotificationReceiver.ACTION_PAUSE)
-            InstallUiStateStore.pauseCurrent()
-            DownloadService.setProgressNotificationVisible(context, false)
-        }
-        InstallPhase.PAUSED -> {
-            DownloadTaskRegistry.applyCurrent(DownloadNotificationReceiver.ACTION_RESUME)
-            InstallUiStateStore.resumeCurrent()
-            DownloadService.setProgressNotificationVisible(context, true)
+        InstallPhase.DOWNLOADING, InstallPhase.PAUSED -> {
+            // 点击中心方形 = 取消下载：发送取消指令并立即清掉按钮状态，
+            // 下载协程收到 DownloadCancelledException 后自行 dismiss 剩余状态。
+            DownloadTaskRegistry.applyCurrent(DownloadNotificationReceiver.ACTION_CANCEL)
+            InstallUiStateStore.dismiss(state.packageName)
+            DownloadNotification.cancelOngoing(context)
         }
         else -> onInstall(app)
     }
-}
-
-private fun InstallUiState.label(idleLabel: String): String = when (phase) {
-    InstallPhase.QUEUED -> "获取链接"
-    InstallPhase.DOWNLOADING -> progress?.let { "$it%" } ?: "获取链接"
-    InstallPhase.PAUSED -> "已暂停"
-    InstallPhase.INSTALLING -> "正在安装"
-    InstallPhase.AWAITING_USER_ACTION -> "等待安装确认"
-    InstallPhase.COMPLETE -> idleLabel
-    InstallPhase.FAILED -> idleLabel
 }
 
 private fun InstallUiState.resultMessage(): String = when (phase) {
@@ -274,9 +313,7 @@ private val ACTIVE_PHASES = setOf(
     InstallPhase.INSTALLING,
     InstallPhase.AWAITING_USER_ACTION,
 )
-private val InstallPillWidth = 88.dp
 private val installLabelStyle = TextStyle(
     fontSize = 14.sp,
     lineHeight = 16.sp,
-    platformStyle = PlatformTextStyle(includeFontPadding = false),
 )

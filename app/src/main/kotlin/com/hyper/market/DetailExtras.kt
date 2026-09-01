@@ -6,7 +6,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -60,31 +59,39 @@ internal fun OptionalDetailSections(
 @Composable
 private fun PromotionSection(promotions: List<DetailPromotion>) {
     val context = LocalContext.current
-    SectionLabel("优惠活动", insideMargin = SectionLabelPaddedContainerMargin)
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(promotions) { promotion ->
-            Card(
-                modifier = Modifier.width(260.dp).clickable {
-                    if (promotion.jumpUrl.isNotBlank()) {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, promotion.jumpUrl.toUri()))
-                    }
-                },
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (promotion.previewImageUrl.isNotBlank()) {
-                        RemoteImage(
-                            promotion.previewImageUrl,
-                            "优惠活动",
-                            Modifier.fillMaxWidth().height(150.dp),
+    // 标题与内容包进同一 Column：标题→内容间距 = 标题自带 8dp（对齐设置页节奏）。
+    Column {
+        SectionLabel("优惠活动", insideMargin = SectionLabelPaddedContainerMargin)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(promotions) { promotion ->
+                Card(
+                    modifier = Modifier.width(260.dp),
+                    onClick = {
+                        if (promotion.jumpUrl.isNotBlank()) {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, promotion.jumpUrl.toUri()))
+                        }
+                    },
+                    showIndication = true,
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (promotion.previewImageUrl.isNotBlank()) {
+                            RemoteImage(
+                                promotion.previewImageUrl,
+                                "优惠活动",
+                                Modifier.fillMaxWidth().height(150.dp),
+                            )
+                        }
+                        Text(promotion.title.ifBlank { promotion.activityTag }, fontSize = 15.sp)
+                        Text(
+                            promotion.description,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            fontSize = 14.sp,
+                            maxLines = 3,
                         )
                     }
-                    Text(promotion.title.ifBlank { promotion.activityTag }, fontSize = 15.sp)
-                    Text(
-                        promotion.description,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        fontSize = 14.sp,
-                        maxLines = 3,
-                    )
                 }
             }
         }
@@ -93,17 +100,19 @@ private fun PromotionSection(promotions: List<DetailPromotion>) {
 
 @Composable
 private fun CommentSection(details: MarketAppDetails) {
-    SectionLabel("评论与评分", insideMargin = SectionLabelPaddedContainerMargin)
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            details.comments.take(MAX_DETAIL_COMMENTS).forEach { comment ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        "${comment.userName.ifBlank { "用户" }}  ${formatCommentScore(comment.score)}",
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    )
-                    Text(comment.content, fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface)
+    Column {
+        SectionLabel("评论与评分", insideMargin = SectionLabelPaddedContainerMargin)
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                details.comments.take(MAX_DETAIL_COMMENTS).forEach { comment ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "${comment.userName.ifBlank { "用户" }}  ${formatCommentScore(comment.score)}",
+                            fontSize = 14.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        )
+                        Text(comment.content, fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface)
+                    }
                 }
             }
         }
@@ -115,22 +124,26 @@ private fun RelatedAppsSection(
     apps: List<MarketAppInfo>,
     onOpenDetail: (MarketAppInfo) -> Unit,
 ) {
-    SectionLabel("同开发者应用", insideMargin = SectionLabelPaddedContainerMargin)
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(apps) { app ->
-            Card(
-                modifier = Modifier.width(210.dp).clickable { onOpenDetail(app) },
-            ) {
-                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    DetailAppIcon(app, 48.dp)
-                    Column(modifier = Modifier.padding(start = 12.dp)) {
-                        Text(app.displayName, fontSize = 15.sp, maxLines = 1)
-                        Text(
-                            app.publisherName,
-                            fontSize = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            maxLines = 1,
-                        )
+    Column {
+        SectionLabel("同开发者应用", insideMargin = SectionLabelPaddedContainerMargin)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(apps) { app ->
+                Card(
+                    modifier = Modifier.width(210.dp),
+                    onClick = { onOpenDetail(app) },
+                    showIndication = true,
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        DetailAppIcon(app, 48.dp)
+                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                            Text(app.displayName, fontSize = 15.sp, maxLines = 1)
+                            Text(
+                                app.publisherName,
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }

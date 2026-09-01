@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import top.yukonga.miuix.kmp.basic.InputField
@@ -52,12 +51,12 @@ internal fun SearchField(
 
 @Composable
 internal fun HistoryHeader(onClear: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = HISTORY_HEADER_TOP_PADDING, start = 4.dp),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("搜索历史", fontSize = 18.sp, color = MiuixTheme.colorScheme.onBackground)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        SectionLabel(
+            "搜索历史",
+            modifier = Modifier.weight(1f),
+            insideMargin = SectionLabelPaddedContainerMargin,
+        )
         Text(
             "清除历史",
             fontSize = 14.sp,
@@ -65,7 +64,8 @@ internal fun HistoryHeader(onClear: () -> Unit) {
             maxLines = 1,
             modifier = Modifier
                 .clickable(onClick = onClear)
-                .padding(horizontal = 2.dp, vertical = 14.dp),
+                .padding(end = 4.dp)
+                .padding(vertical = 14.dp),
         )
     }
 }
@@ -73,10 +73,10 @@ internal fun HistoryHeader(onClear: () -> Unit) {
 @Composable
 internal fun HistoryChip(value: String, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.offset(y = HISTORY_CHIP_OFFSET_Y).clickable(onClick = onClick),
-        cornerRadius = 24.dp,
+        onClick = onClick,
+        showIndication = true,
     ) {
-        Text(value, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp))
+        Text(value, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp))
     }
 }
 
@@ -88,7 +88,7 @@ internal fun SearchResultCard(
     onInstall: (MarketAppInfo) -> Unit,
     onOpenInstalled: (MarketAppInfo) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth().clickable { onOpenDetail(app) }, cornerRadius = 30.dp) {
+    Card(modifier = Modifier.fillMaxWidth(), onClick = { onOpenDetail(app) }, showIndication = true) {
         Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             RemoteAppIcon(app.getIconUrl(), app.getDisplayName(), Modifier.size(52.dp))
             Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
@@ -120,6 +120,3 @@ internal enum class SearchAction { INSTALL, UPDATE, OPEN }
 
 private fun formatAppSize(bytes: Long): String =
     if (bytes <= 0) "" else "%.1fMB".format(java.util.Locale.CHINA, bytes / (1024f * 1024f))
-
-private val HISTORY_HEADER_TOP_PADDING = 4.5.dp
-private val HISTORY_CHIP_OFFSET_Y = (-9.5).dp

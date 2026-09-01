@@ -98,6 +98,7 @@ dependencies {
     implementation "top.yukonga.miuix.kmp:miuix-preference:0.9.3"
     implementation "top.yukonga.miuix.kmp:miuix-icons:0.9.3"
     implementation "top.yukonga.miuix.kmp:miuix-nav:0.9.4-rc01"
+    implementation "top.yukonga.miuix.kmp:miuix-squircle:0.9.3"
     implementation "io.coil-kt.coil3:coil-compose:3.5.0"
     implementation "io.coil-kt.coil3:coil-network-okhttp:3.5.0"
     implementation "org.lsposed.hiddenapibypass:hiddenapibypass:6.1"

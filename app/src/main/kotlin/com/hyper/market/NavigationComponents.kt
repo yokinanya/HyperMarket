@@ -1,7 +1,5 @@
 package com.hyper.market
 
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.EaseInOut
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.background
@@ -16,7 +14,6 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,8 +34,6 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Update
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlin.math.abs
 
 @Composable
 internal fun MarketNavigation(selected: Int, blur: BarBlur, onSelected: (Int) -> Unit) {
@@ -75,7 +70,6 @@ internal fun MainPage(
     settings: AppSettings,
     updateStore: UpdateStore,
     packageVisibilityRefresh: Int,
-    animationsEnabled: Boolean,
     bottomBarHeight: Dp,
     onSelected: (Int) -> Unit,
     onOpenDetail: (MarketAppInfo) -> Unit,
@@ -88,28 +82,13 @@ internal fun MainPage(
     onSettingsChange: (AppSettings) -> Unit,
 ) {
     val pagerState = rememberPagerState(initialPage = selected) { MAIN_TAB_COUNT }
-    LaunchedEffect(selected, animationsEnabled) {
-        if (pagerState.currentPage == selected) return@LaunchedEffect
-        if (!animationsEnabled) {
-            pagerState.scrollToPage(selected)
-            return@LaunchedEffect
-        }
-        val distance = abs(selected - pagerState.currentPage).coerceAtLeast(TAB_MIN_ANIMATION_DISTANCE)
-        val duration = TAB_BASE_DURATION_MS + TAB_PER_PAGE_DURATION_MS * distance
-        pagerState.animateScrollToPage(
-            page = selected,
-            animationSpec = tween(durationMillis = duration, easing = EaseInOut),
-        )
-    }
-    LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.settledPage }
-            .distinctUntilChanged()
-            .collect(onSelected)
-    }
+    // 切页无动画、禁手势滑动（底栏点击直接跳转）。
+    LaunchedEffect(selected) { pagerState.scrollToPage(selected) }
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxSize(),
         beyondViewportPageCount = 1,
+        userScrollEnabled = false,
         key = { it },
     ) { page ->
         MainTabContent(
@@ -234,6 +213,3 @@ private fun MainTabContent(page: Int, content: MainTabContentOptions) {
 }
 
 private const val MAIN_TAB_COUNT = 4
-private const val TAB_MIN_ANIMATION_DISTANCE = 2
-private const val TAB_BASE_DURATION_MS = 80
-private const val TAB_PER_PAGE_DURATION_MS = 70

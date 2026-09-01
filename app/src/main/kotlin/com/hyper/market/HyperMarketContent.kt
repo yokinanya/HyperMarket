@@ -110,7 +110,6 @@ internal fun HyperMarketContent(state: HyperMarketContentState) {
                         state.settings,
                         state.updateStore,
                         state.packageVisibilityRefresh,
-                        animationsEnabled = state.animationsEnabled,
                         bottomBarHeight = bottomBarHeight,
                         onSelected = state.onSelectedTab,
                         onOpenDetail = state.onOpenDetail,

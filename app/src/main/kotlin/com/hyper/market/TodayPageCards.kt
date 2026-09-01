@@ -1,7 +1,6 @@
 package com.hyper.market
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,18 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.market.model.MarketAppInfo
@@ -33,12 +27,11 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @Composable
 internal fun TodayFeatureCard(item: TodayFeaturedItem, onClick: () -> Unit) {
     val canOpen = item.resourceId.isNotBlank() || item.app != null || item.clickUrl.isNotBlank()
-    val modifier = Modifier
-        .fillMaxWidth()
-        .height(330.dp)
-        .clip(RoundedCornerShape(16.dp))
-        .clickable(enabled = canOpen, onClick = onClick)
-    Card(modifier = modifier, cornerRadius = 16.dp) {
+    Card(
+        modifier = Modifier.fillMaxWidth().height(330.dp),
+        onClick = if (canOpen) onClick else null,
+        showIndication = true,
+    ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (item.coverImageUrl.isNotBlank()) {
                 RemoteImage(
@@ -70,13 +63,14 @@ private fun TodayFeatureFooter(item: TodayFeaturedItem, modifier: Modifier = Mod
         Text(
             text = if (item.isGoldenAward) "金米奖 · ${item.title}" else "进行中的活动",
             color = Color.White.copy(alpha = 0.72f),
-            style = todayFeatureTextStyle(14.sp, 18.sp),
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
             maxLines = 1,
         )
         if (item.isGoldenAward && item.summary.isNotBlank()) {
-            Text(item.summary, color = Color.White, style = todayFeatureTextStyle(20.sp, 24.sp), maxLines = 1)
+            Text(item.summary, color = Color.White, fontSize = 20.sp, lineHeight = 24.sp, maxLines = 1)
         } else if (!item.isGoldenAward && item.title.isNotBlank()) {
-            Text(item.title, color = Color.White, style = todayFeatureTextStyle(20.sp, 24.sp), maxLines = 1)
+            Text(item.title, color = Color.White, fontSize = 20.sp, lineHeight = 24.sp, maxLines = 1)
         }
         if (item.apps.size > 1) {
             Row(
@@ -106,36 +100,32 @@ private fun TodayAppRow(app: MarketAppInfo) {
             Text(
                 text = app.displayName,
                 color = Color.White,
-                style = todayFeatureTextStyle(16.sp, 20.sp),
+                fontSize = 17.sp,
+                lineHeight = 20.sp,
                 maxLines = 1,
             )
             Text(
                 text = app.publisherName,
                 color = Color.White.copy(alpha = 0.72f),
-                style = todayFeatureTextStyle(14.sp, 18.sp),
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 maxLines = 1,
             )
         }
     }
 }
 
-private fun todayFeatureTextStyle(fontSize: TextUnit, lineHeight: TextUnit) = TextStyle(
-    fontSize = fontSize,
-    lineHeight = lineHeight,
-    platformStyle = PlatformTextStyle(includeFontPadding = false),
-)
-
 @Composable
 internal fun TodayLoadingState() {
     repeat(2) { index ->
-        Box(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = if (index == 0) 0.dp else 20.dp)
-                .height(330.dp)
-                .clip(RoundedCornerShape(38.dp))
-                .background(MiuixTheme.colorScheme.secondaryContainer),
-        )
+                .height(330.dp),
+        ) {
+            Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.secondaryContainer))
+        }
     }
 }
 

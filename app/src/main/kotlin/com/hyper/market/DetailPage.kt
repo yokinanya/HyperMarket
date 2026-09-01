@@ -1,9 +1,6 @@
 package com.hyper.market
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -13,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -30,13 +25,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,11 +42,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.VerticalDivider
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.hyper.market.installer.DownloadNotificationReceiver
@@ -163,13 +153,13 @@ private fun DetailHeader(
             Text(
                 displayName,
                 // 字号对齐设置页标题体系上限（20sp），不再用 24sp 大字。
-                style = detailHeaderTextStyle(20.sp),
+                fontSize = 20.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 app.getPublisherName(),
-                style = detailHeaderTextStyle(14.sp),
+                fontSize = 14.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -181,11 +171,6 @@ private fun DetailHeader(
         }
     }
 }
-
-private fun detailHeaderTextStyle(fontSize: androidx.compose.ui.unit.TextUnit) = TextStyle(
-    fontSize = fontSize,
-    platformStyle = PlatformTextStyle(includeFontPadding = false),
-)
 
 @Composable
 private fun DetailStats(app: MarketAppInfo) {
@@ -203,8 +188,9 @@ private fun DetailStats(app: MarketAppInfo) {
         ) {
             stats.forEachIndexed { index, stat ->
                 if (index > 0) {
-                    Spacer(
-                        Modifier.width(1.dp).height(36.dp).background(MiuixTheme.colorScheme.dividerLine),
+                    VerticalDivider(
+                        modifier = Modifier.height(36.dp),
+                        thickness = 1.dp,
                     )
                 }
                 StatItem(stat.first, stat.second)

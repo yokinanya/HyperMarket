@@ -1,11 +1,22 @@
 package com.hyper.market
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -54,7 +66,7 @@ enum class SettingsDestination(val title: String, val summary: String) {
     HISTORY("更新历史", "查看通过本应用完成的安装与更新"),
     DEVICE("设备信息", "请求使用的设备指纹与版本参数"),
     INSTALLER("安装方式", "选择安装器与安装包保存选项"),
-    SAVED("保存的安装包", "管理已下载的安装包"),
+    SAVED("安装包", "管理已下载的安装包"),
     ABOUT("关于", "版本信息与项目地址"),
 }
 
@@ -74,6 +86,9 @@ fun SettingsSubpage(
 ) {
     var confirmClearHistory by remember { mutableStateOf(false) }
     var historyVersion by remember { mutableIntStateOf(0) }
+    val savedEditState = remember(destination) { SavedPackagesEditState() }
+    // 编辑态（多选删除）中系统返回先退出编辑，而非关闭页面。
+    BackHandler(enabled = savedEditState.isEditing) { savedEditState.reset() }
     if (destination == SettingsDestination.ABOUT) {
         SettingsAboutPage(onBack)
         return
@@ -113,33 +128,65 @@ fun SettingsSubpage(
             )
         },
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .blurSource(blur)
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(
-                start = 12.dp,
-                end = 12.dp,
-                top = paddingValues.calculateTopPadding() + 8.dp,
-                bottom = paddingValues.calculateBottomPadding() + 12.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            when (destination) {
-                SettingsDestination.IGNORED -> item { IgnoredUpdatesPage(updateStore) }
-                SettingsDestination.HISTORY -> item { UpdateHistoryPage(updateStore, historyVersion) }
-                SettingsDestination.SAVED -> item {
-                    SavedPackagesPage(updateStore, onOpenSaved, onReinstallSaved)
+        val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val editingExtraPadding =
+            if (destination == SettingsDestination.SAVED && savedEditState.isEditing) 64.dp + navBarPadding else 0.dp
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blurSource(blur)
+                    .scrollEndHaptic()
+                    .overScrollVertical()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top = paddingValues.calculateTopPadding(),
+                    bottom = paddingValues.calculateBottomPadding() + 12.dp + editingExtraPadding,
+                ),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                when (destination) {
+                    SettingsDestination.IGNORED -> item { IgnoredUpdatesPage(updateStore) }
+                    SettingsDestination.HISTORY -> item { UpdateHistoryPage(updateStore, historyVersion) }
+                    SettingsDestination.SAVED -> item {
+                        SavedPackagesPage(
+                            updateStore,
+                            onOpenSaved,
+                            onReinstallSaved,
+                            editState = savedEditState,
+                            refreshKey = historyVersion,
+                        )
+                    }
+                    SettingsDestination.DEVICE -> item {
+                        DeviceProfilePage(profile, onProfileChange)
+                    }
+                    SettingsDestination.MANUAL -> item { ManualUpdateCard(apiClient, onInstall) }
+                    SettingsDestination.INSTALLER -> item {
+                        InstallerCard(settings, onSettingsChange)
+                    }
                 }
-                SettingsDestination.DEVICE -> item {
-                    DeviceProfilePage(profile, onProfileChange)
-                }
-                SettingsDestination.MANUAL -> item { ManualUpdateCard(apiClient, onInstall) }
-                SettingsDestination.INSTALLER -> item {
-                    InstallerCard(settings, onSettingsChange)
+            }
+            if (destination == SettingsDestination.SAVED) {
+                // 编辑底栏与列表 blurSource 互为同级兄弟：实时模糊列表内容（MGAide 同款）。
+                AnimatedVisibility(
+                    visible = savedEditState.isEditing,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(tween(durationMillis = 220)),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween(durationMillis = 180)),
+                    modifier = Modifier.align(Alignment.BottomCenter).zIndex(2f),
+                ) {
+                    SavedPackagesEditBar(
+                        selectedCount = savedEditState.selectedIds.size,
+                        blur = blur,
+                        onDelete = {
+                            updateStore.savedPackages()
+                                .filter { it.id in savedEditState.selectedIds }
+                                .forEach { updateStore.deleteSavedPackage(it) }
+                            savedEditState.reset()
+                            historyVersion++
+                        },
+                    )
                 }
             }
         }

@@ -8,8 +8,6 @@ import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,7 +50,8 @@ private fun UpdateCardContent(
             text = "${updates.size} 个应用待更新",
             modifier = Modifier.weight(1f),
             color = MiuixTheme.colorScheme.onSurface,
-            style = todayUpdateTextStyle(20.sp, 24.sp),
+            fontSize = 17.sp,
+            lineHeight = 20.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -60,12 +59,5 @@ private fun UpdateCardContent(
     }
 }
 
-
-private fun todayUpdateTextStyle(fontSize: androidx.compose.ui.unit.TextUnit, lineHeight: androidx.compose.ui.unit.TextUnit) =
-    TextStyle(
-        fontSize = fontSize,
-        lineHeight = lineHeight,
-        platformStyle = PlatformTextStyle(includeFontPadding = false),
-    )
 
 private val TODAY_UPDATE_CARD_RADIUS = 16.dp

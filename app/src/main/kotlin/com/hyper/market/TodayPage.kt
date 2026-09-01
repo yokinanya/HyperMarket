@@ -135,7 +135,7 @@ fun TodayPage(
             .overScrollVertical()
             .padding(start = 12.dp, end = 12.dp),
         contentPadding = PaddingValues(top = topPadding, bottom = 12.dp + bottomBarHeight),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
             TodayUpdateCard(

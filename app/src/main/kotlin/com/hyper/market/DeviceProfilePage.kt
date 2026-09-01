@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,6 +17,8 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.util.DisplayMetrics
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
@@ -36,10 +37,7 @@ internal fun DeviceProfilePage(
         mutableStateOf(effectiveDeviceProfile(profile, context, metrics))
     }
     var showTemplateDialog by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier.padding(top = 8.4.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ProfileSourceSelector(profile.source) { source ->
             onProfileChange(selectProfileSource(profile, source, draftValues, context, metrics))
         }
@@ -95,13 +93,16 @@ private fun selectProfileSource(
 @Composable
 private fun ProfileSourceSelector(source: String, onSourceSelected: (String) -> Unit) {
     // miuix 官方下拉选择组件（示例 DropdownSection 标准），替代自绘展开菜单。
+    // 白色圆角卡片承载：卡片 Surface 将行内按压高亮裁剪为圆角轮廓。
     val options = listOf("custom" to "自定义", "preset" to "预设信息", "device" to "从设备获取")
-    OverlayDropdownPreference(
-        title = "信息来源",
-        items = options.map { it.second },
-        selectedIndex = options.indexOfFirst { it.first == source }.coerceAtLeast(0),
-        onSelectedIndexChange = { index -> onSourceSelected(options[index].first) },
-    )
+    Card(modifier = Modifier.fillMaxWidth()) {
+        OverlayDropdownPreference(
+            title = "信息来源",
+            items = options.map { it.second },
+            selectedIndex = options.indexOfFirst { it.first == source }.coerceAtLeast(0),
+            onSelectedIndexChange = { index -> onSourceSelected(options[index].first) },
+        )
+    }
 }
 
 @Composable
@@ -142,12 +143,13 @@ private fun SaveTemplateDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) 
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             TextButton(text = "取消", onClick = onDismiss, modifier = Modifier.weight(1f))
             TextButton(
                 text = "保存",
                 onClick = { if (name.isNotBlank()) onSave(name.trim()) },
                 modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary(),
             )
         }
     }

@@ -43,6 +43,7 @@ import com.hyper.market.model.TodayArticle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -129,11 +130,12 @@ fun TodayArticlePage(
                     ArticleErrorState(error.orEmpty()) { reloadKey++ }
                 }
                 else -> item(key = "loading") {
-                    Text(
-                        "加载中…",
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        modifier = Modifier.padding(12.dp),
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(28.dp),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
                 }
             }
         }
@@ -212,12 +214,12 @@ private fun ArticleImage(url: String, title: String) {
 private fun ArticleAppCard(app: MarketAppInfo, onOpenDetail: (MarketAppInfo) -> Unit, onInstall: (MarketAppInfo) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(18.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             RemoteAppIcon(app.iconUrl, app.displayName, Modifier.size(62.dp))
             Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
-                Text(app.displayName, fontSize = 19.sp)
+                Text(app.displayName, fontSize = 17.sp)
                 Text(app.publisherName, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
             ActionPill("安装") { onInstall(app) }
