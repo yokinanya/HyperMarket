@@ -15,8 +15,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.pm.PackageInfoCompat
-import com.hyper.market.installer.DownloadNotificationReceiver
-import com.hyper.market.installer.DownloadTaskRegistry
 import com.hyper.market.model.MarketAppInfo
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -37,14 +35,15 @@ internal fun DetailActionGroup(
     val installState by stateFlow.collectAsState(initial = null)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailActionButton(app, state, onInstall, onOpenInstalled)
-        if (state == DetailActionState.INSTALLED || installState?.phase?.isDetailActive() == true) {
-            DetailMoreButton(installState?.phase?.isDetailActive() == true) { onInstall(app) }
+        // 下载/安装进行中隐藏“更多操作”入口；下载中取消走进度圆球中心方块。
+        if (state == DetailActionState.INSTALLED && installState?.phase?.isDetailActive() != true) {
+            DetailMoreButton { onInstall(app) }
         }
     }
 }
 
 @Composable
-private fun DetailMoreButton(activeDownload: Boolean, onRedownload: () -> Unit) {
+private fun DetailMoreButton(onRedownload: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     IconButton(
         onClick = { expanded = true },
@@ -54,11 +53,11 @@ private fun DetailMoreButton(activeDownload: Boolean, onRedownload: () -> Unit) 
     }
     WindowDialog(show = expanded, title = "更多操作", onDismissRequest = { expanded = false }) {
         TextButton(
-            text = if (activeDownload) "取消下载" else "重新下载",
+            text = "重新下载",
             modifier = Modifier.fillMaxWidth(),
             onClick = {
                 expanded = false
-                if (activeDownload) cancelActiveDownload() else onRedownload()
+                onRedownload()
             },
         )
     }
@@ -85,11 +84,6 @@ internal fun detailActionState(context: Context, app: MarketAppInfo): DetailActi
     }
     return if (app.versionCode > installedCode) DetailActionState.UPDATE_AVAILABLE
     else DetailActionState.INSTALLED
-}
-
-private fun cancelActiveDownload() {
-    DownloadTaskRegistry.applyCurrent(DownloadNotificationReceiver.ACTION_CANCEL)
-    InstallUiStateStore.cancelCurrent()
 }
 
 private fun InstallPhase.isDetailActive() = this in ACTIVE_DETAIL_PHASES

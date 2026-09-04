@@ -1,23 +1,35 @@
 package com.hyper.market
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -53,7 +66,7 @@ enum class SettingsDestination(val title: String, val summary: String) {
     HISTORY("更新历史", "查看通过本应用完成的安装与更新"),
     DEVICE("设备信息", "请求使用的设备指纹与版本参数"),
     INSTALLER("安装方式", "选择安装器与安装包保存选项"),
-    SAVED("保存的安装包", "管理已下载的安装包"),
+    SAVED("安装包", "管理已下载的安装包"),
     ABOUT("关于", "版本信息与项目地址"),
 }
 
@@ -73,43 +86,108 @@ fun SettingsSubpage(
 ) {
     var confirmClearHistory by remember { mutableStateOf(false) }
     var historyVersion by remember { mutableIntStateOf(0) }
+    val savedEditState = remember(destination) { SavedPackagesEditState() }
+    // 编辑态（多选删除）中系统返回先退出编辑，而非关闭页面。
+    BackHandler(enabled = savedEditState.isEditing) { savedEditState.reset() }
     if (destination == SettingsDestination.ABOUT) {
         SettingsAboutPage(onBack)
         return
     }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(0.dp),
-    ) {
-        item {
-            SubpageHeader(
-                destination.title,
-                onBack,
-                trailing = if (destination == SettingsDestination.HISTORY) {
-                    {
+    val scrollBehavior = MiuixScrollBehavior()
+    // 顶栏实时模糊（miuix-blur textureBlur，MGAide 同款）：API 33+ 启用，低版本降级纯色。
+    // TopAppBar（topBar 槽位）与内容盒（blurSource）是 Scaffold 的同级子节点，无自采样。
+    val blur = rememberBarBlur()
+    top.yukonga.miuix.kmp.basic.Scaffold(
+        topBar = {
+            TopAppBar(
+                title = destination.title,
+                scrollBehavior = scrollBehavior,
+                modifier = Modifier.barBlurMaterial(blur, MiuixTheme.colorScheme.surface),
+                color = if (blur.enabled) Color.Transparent else MiuixTheme.colorScheme.surface,
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            MiuixIcons.Back,
+                            contentDescription = "返回",
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                },
+                actions = {
+                    if (destination == SettingsDestination.HISTORY) {
                         IconButton(onClick = { confirmClearHistory = true }) {
                             Icon(
                                 MiuixIcons.Close,
                                 contentDescription = "清空记录",
                                 modifier = Modifier.size(22.dp),
+                                tint = MiuixTheme.colorScheme.onSurfaceContainer,
                             )
                         }
                     }
-                } else null,
+                },
             )
-        }
-        when (destination) {
-            SettingsDestination.IGNORED -> item { IgnoredUpdatesPage(updateStore) }
-            SettingsDestination.HISTORY -> item { UpdateHistoryPage(updateStore, historyVersion) }
-            SettingsDestination.SAVED -> item {
-                SavedPackagesPage(updateStore, onOpenSaved, onReinstallSaved)
+        },
+    ) { paddingValues ->
+        val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val editingExtraPadding =
+            if (destination == SettingsDestination.SAVED && savedEditState.isEditing) 64.dp + navBarPadding else 0.dp
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blurSource(blur)
+                    .scrollEndHaptic()
+                    .overScrollVertical()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top = paddingValues.calculateTopPadding(),
+                    bottom = paddingValues.calculateBottomPadding() + 12.dp + editingExtraPadding,
+                ),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                when (destination) {
+                    SettingsDestination.IGNORED -> item { IgnoredUpdatesPage(updateStore) }
+                    SettingsDestination.HISTORY -> item { UpdateHistoryPage(updateStore, historyVersion) }
+                    SettingsDestination.SAVED -> item {
+                        SavedPackagesPage(
+                            updateStore,
+                            onOpenSaved,
+                            onReinstallSaved,
+                            editState = savedEditState,
+                            refreshKey = historyVersion,
+                        )
+                    }
+                    SettingsDestination.DEVICE -> item {
+                        DeviceProfilePage(profile, onProfileChange)
+                    }
+                    SettingsDestination.MANUAL -> item { ManualUpdateCard(apiClient, onInstall) }
+                    SettingsDestination.INSTALLER -> item {
+                        InstallerCard(settings, onSettingsChange)
+                    }
+                }
             }
-            SettingsDestination.DEVICE -> item {
-                DeviceProfilePage(profile, onProfileChange)
-            }
-            SettingsDestination.MANUAL -> item { ManualUpdateCard(apiClient, onInstall) }
-            SettingsDestination.INSTALLER -> item {
-                InstallerCard(settings, onSettingsChange)
+            if (destination == SettingsDestination.SAVED) {
+                // 编辑底栏与列表 blurSource 互为同级兄弟：实时模糊列表内容（MGAide 同款）。
+                AnimatedVisibility(
+                    visible = savedEditState.isEditing,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(tween(durationMillis = 220)),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween(durationMillis = 180)),
+                    modifier = Modifier.align(Alignment.BottomCenter).zIndex(2f),
+                ) {
+                    SavedPackagesEditBar(
+                        selectedCount = savedEditState.selectedIds.size,
+                        blur = blur,
+                        onDelete = {
+                            updateStore.savedPackages()
+                                .filter { it.id in savedEditState.selectedIds }
+                                .forEach { updateStore.deleteSavedPackage(it) }
+                            savedEditState.reset()
+                            historyVersion++
+                        },
+                    )
+                }
             }
         }
     }
@@ -124,27 +202,5 @@ fun SettingsSubpage(
                 confirmClearHistory = false
             },
         )
-    }
-}
-
-@Composable
-private fun SubpageHeader(title: String, onBack: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Box(modifier = Modifier.fillMaxWidth().height(38.dp)) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier.offset(y = 7.dp).size(48.dp),
-            ) {
-                Icon(
-                    MiuixIcons.Back,
-                    contentDescription = "返回",
-                    modifier = Modifier.size(24.dp),
-                )
-            }
-            Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp)) {
-                trailing?.invoke()
-            }
-        }
-        PageTitle(title, bottomPadding = 8.dp)
     }
 }

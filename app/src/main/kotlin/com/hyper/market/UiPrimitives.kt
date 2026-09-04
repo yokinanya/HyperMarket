@@ -31,8 +31,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,7 +41,9 @@ import coil3.request.ImageRequest
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.SmallTitleDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -64,11 +64,8 @@ internal fun ActionPill(label: String, primary: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             label,
-            style = TextStyle(
-                fontSize = 14.sp,
-                lineHeight = 16.sp,
-                platformStyle = PlatformTextStyle(includeFontPadding = false),
-            ),
+            fontSize = 14.sp,
+            lineHeight = 16.sp,
             maxLines = 1,
         )
     }
@@ -76,27 +73,6 @@ internal fun ActionPill(label: String, primary: Boolean, onClick: () -> Unit) {
 
 private val ACTION_PILL_RADIUS = 28.dp
 private val ACTION_PILL_HEIGHT = 34.dp
-
-@Composable
-internal fun PageColumn(content: @Composable () -> Unit) {
-    androidx.compose.foundation.layout.Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) { content() }
-}
-
-@Composable
-internal fun PageTitle(text: String, bottomPadding: androidx.compose.ui.unit.Dp = 16.5.dp) {
-    Text(
-        text = text,
-        modifier = Modifier.padding(start = 13.75.dp, top = 14.dp, bottom = bottomPadding),
-        fontSize = 32.sp,
-        fontWeight = FontWeight.Normal,
-        color = MiuixTheme.colorScheme.onBackground,
-    )
-}
 
 @Composable
 internal fun AppIcon(label: String, color: Color, modifier: Modifier = Modifier) {
@@ -123,7 +99,7 @@ internal fun InstalledAppIcon(packageName: String, label: String, modifier: Modi
     if (drawable == null) IconStatusTile("未安装", modifier)
     else AndroidView(
         factory = { ImageViewFactory.create(it, drawable, label) },
-        modifier = modifier.clip(RoundedCornerShape(16.dp)),
+        modifier = modifier.clip(RoundedCornerShape(10.dp)),
     )
 }
 
@@ -136,7 +112,7 @@ internal fun RemoteAppIcon(url: String, label: String, modifier: Modifier = Modi
     RemoteImage(
         url,
         label,
-        modifier.clip(RoundedCornerShape(16.dp)),
+        modifier.clip(RoundedCornerShape(10.dp)),
     )
 }
 
@@ -231,10 +207,9 @@ internal fun GradientFeatureCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(300.dp)
-            .clip(RoundedCornerShape(32.dp))
-            .clickable(onClick = onClick),
-        cornerRadius = 32.dp,
+            .height(300.dp),
+        onClick = onClick,
+        showIndication = true,
     ) {
         Box(
             modifier = Modifier
@@ -253,14 +228,16 @@ internal fun GradientFeatureCard(
     }
 }
 
+/** 容器自带 12dp 横向边距时的分区小标题内边距：16dp + 12dp = 28dp，与卡片文字对齐。 */
+internal val SectionLabelPaddedContainerMargin = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+
 @Composable
-internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        fontSize = 14.sp,
-        color = MiuixTheme.colorScheme.onBackground,
-        modifier = modifier,
-    )
+internal fun SectionLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+    insideMargin: PaddingValues = SmallTitleDefaults.InsideMargin,
+) {
+    SmallTitle(text = text, modifier = modifier, insideMargin = insideMargin)
 }
 
 @Composable
@@ -273,10 +250,8 @@ internal fun RowScope.SettingText(title: String, summary: String) {
 
 @Composable
 internal fun RowDivider() {
-    Spacer(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(MiuixTheme.colorScheme.dividerLine),
+    HorizontalDivider(
+        modifier = Modifier.fillMaxWidth(),
+        thickness = 1.dp,
     )
 }

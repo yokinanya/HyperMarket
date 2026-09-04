@@ -18,6 +18,7 @@ data class AppSettings(
     val showSameDeveloper: Boolean = false,
     val optimizeNames: Boolean = true,
     val xiaomiIslandOptimization: Boolean = false,
+    val predictiveBack: Boolean = true,
     val startPage: Int = 0,
     val installerMode: String = "标准安装",
     val customInstallerPackage: String = "",
@@ -47,6 +48,7 @@ class SettingsStore(context: Context) {
         showSameDeveloper = preferences.getBoolean(KEY_SHOW_DEVELOPER, false),
         optimizeNames = preferences.getBoolean(KEY_OPTIMIZE_NAMES, true),
         xiaomiIslandOptimization = preferences.getBoolean(KEY_ISLAND, false),
+        predictiveBack = preferences.getBoolean(KEY_PREDICTIVE_BACK, true),
         startPage = preferences.getInt(KEY_START_PAGE, 0),
         installerMode = preferences.getString(KEY_INSTALLER_MODE, "标准安装") ?: "标准安装",
         customInstallerPackage = preferences.getString(KEY_CUSTOM_INSTALLER, "") ?: "",
@@ -66,6 +68,7 @@ class SettingsStore(context: Context) {
             putBoolean(KEY_SHOW_DEVELOPER, settings.showSameDeveloper)
             putBoolean(KEY_OPTIMIZE_NAMES, settings.optimizeNames)
             putBoolean(KEY_ISLAND, settings.xiaomiIslandOptimization)
+            putBoolean(KEY_PREDICTIVE_BACK, settings.predictiveBack)
             putInt(KEY_START_PAGE, settings.startPage)
             putString(KEY_INSTALLER_MODE, settings.installerMode)
             putString(KEY_CUSTOM_INSTALLER, settings.customInstallerPackage)
@@ -139,6 +142,7 @@ class SettingsStore(context: Context) {
         const val KEY_SHOW_DEVELOPER = "show_developer"
         const val KEY_OPTIMIZE_NAMES = "optimize_names"
         const val KEY_ISLAND = "xiaomi_island"
+        const val KEY_PREDICTIVE_BACK = "predictive_back"
         const val KEY_START_PAGE = "start_page"
         const val KEY_INSTALLER_MODE = "installer_mode"
         const val KEY_CUSTOM_INSTALLER = "custom_installer_package"

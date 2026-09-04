@@ -4,12 +4,14 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.snap
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
@@ -29,6 +31,7 @@ import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.ThemeController
+import top.yukonga.miuix.kmp.utils.MiuixIndication
 
 @Composable
 fun HyperMarketApp(
@@ -46,11 +49,10 @@ fun HyperMarketApp(
     var settings by remember { androidx.compose.runtime.mutableStateOf(settingsStore.read()) }
     val searchSession = remember { SearchSessionState(settingsStore.readSearchHistory()) }
     var selectedTab by rememberSaveable { mutableIntStateOf(settings.startPage) }
-    var detailApp by remember { androidx.compose.runtime.mutableStateOf<MarketAppInfo?>(null) }
-    var displayedDetailApp by remember { androidx.compose.runtime.mutableStateOf(initialDetail) }
-    var todayArticleId by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-    var displayedArticleId by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-    var settingsDestination by remember { androidx.compose.runtime.mutableStateOf<SettingsDestination?>(null) }
+    // miuix-nav 标准导航栈：栈底为主 Tab 页，二级页携带载荷入栈，转场由 NavDisplay 驱动。
+    val backStack = remember {
+        androidx.compose.runtime.mutableStateListOf<top.yukonga.miuix.kmp.nav.core.NavKey>(MarketNav.Tabs)
+    }
     val searchListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     val settingsScrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
     var operation by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
@@ -61,15 +63,7 @@ fun HyperMarketApp(
 
     LaunchedEffect(initialDetail) {
         if (initialDetail != null) {
-            detailApp = initialDetail
-            displayedDetailApp = initialDetail
-        }
-    }
-    BackHandler(enabled = detailApp != null || todayArticleId != null || settingsDestination != null) {
-        when {
-            detailApp != null -> detailApp = null
-            todayArticleId != null -> todayArticleId = null
-            else -> settingsDestination = null
+            backStack.add(MarketNav.Detail(initialDetail))
         }
     }
 
@@ -84,13 +78,19 @@ fun HyperMarketApp(
     }
 
     fun openDetail(app: MarketAppInfo) {
-        displayedDetailApp = app
-        detailApp = app
+        backStack.add(MarketNav.Detail(app))
     }
 
     fun openArticle(resourceId: String) {
-        displayedArticleId = resourceId
-        todayArticleId = resourceId
+        backStack.add(MarketNav.Article(resourceId))
+    }
+
+    fun openSettings(destination: SettingsDestination) {
+        backStack.add(MarketNav.Settings(destination))
+    }
+
+    fun popNav() {
+        if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
     }
 
     fun install(app: MarketAppInfo) {
@@ -166,12 +166,6 @@ fun HyperMarketApp(
         }
     }
 
-    val route = when {
-        detailApp != null -> "detail"
-        todayArticleId != null -> "today-article"
-        settingsDestination != null -> "settings-${settingsDestination!!.name.lowercase()}"
-        else -> "tabs"
-    }
     // 稳定化所有回调：避免 HyperMarketContentState 每次重建时 lambda 全部变为新实例，
     // 导致 Tab 内容无法跳过重组（性能：UI 线程组合风暴）。
     val stableOnSelectedTab = remember { { value: Int -> selectedTab = value } }
@@ -184,24 +178,14 @@ fun HyperMarketApp(
     val stableOnReinstallSaved = remember { { entry: SavedPackageEntry -> reinstallSaved(entry) } }
     val stableOnSettingsChange = remember { { value: AppSettings -> updateSettings(value) } }
     val stableOnProfileChange = remember { { value: MarketProfileSettings -> updateProfile(value) } }
-    val stableOnOpenSettings = remember { { destination: SettingsDestination -> settingsDestination = destination } }
-    val stableOnBack = remember {
-        {
-            when {
-                detailApp != null -> detailApp = null
-                todayArticleId != null -> todayArticleId = null
-                else -> settingsDestination = null
-            }
-        }
-    }
-    val isAboutPage = settingsDestination == SettingsDestination.ABOUT
-    val isArticlePage = todayArticleId != null
+    val stableOnOpenSettings = remember { { destination: SettingsDestination -> openSettings(destination) } }
+    // 返回由 miuix-nav NavDisplay 的标准返回驱动（含预测性返回手势）回调到这里统一出栈。
+    val stableOnBack = remember { { popNav() } }
+    val topNav = backStack.lastOrNull()
+    val isAboutPage = topNav is MarketNav.Settings && topNav.destination == SettingsDestination.ABOUT
     val animationsEnabled = systemAnimationsEnabled()
-    val aboutBackgroundAlpha by animateFloatAsState(
-        targetValue = if (isAboutPage) 1f else 0f,
-        animationSpec = if (animationsEnabled) tween(320) else snap(),
-        label = "about-background-alpha",
-    )
+    // 关于页动态渐变已移入 SettingsAboutPage 自身（同时作为其毛玻璃卡片的 blur 采样层），
+    // 根级不再渲染 AboutGradientBackground。
     LaunchedEffect(operation) {
         val message = operation ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(
@@ -212,39 +196,28 @@ fun HyperMarketApp(
         if (operation == message) operation = null
     }
     MiuixTheme(controller = themeController) {
-        ConfigureSystemBars(isAboutPage, isArticlePage)
+        // 全局 Hyper 风格按压反馈：所有 plain clickable 重新注入 MiuixIndication
+        val indicationColor = MiuixTheme.colorScheme.onBackground
+        val miuixIndication = remember(indicationColor) { MiuixIndication(color = indicationColor) }
+        CompositionLocalProvider(LocalIndication provides miuixIndication) {
+        ConfigureSystemBars(isAboutPage)
         Box(
             modifier = Modifier.fillMaxSize(),
         ) {
-            if (aboutBackgroundAlpha > 0f) {
-                AboutGradientBackground(
-                    Modifier.fillMaxSize().graphicsLayer { alpha = aboutBackgroundAlpha },
-                )
-            }
             Scaffold(
-                containerColor = if (isAboutPage || isArticlePage) {
-                    Color.Transparent
-                } else {
-                    MiuixTheme.colorScheme.surface
-                },
-                bottomBar = {
-                    if (detailApp == null && todayArticleId == null && settingsDestination == null) {
-                        MarketNavigation(selectedTab) { selectedTab = it }
-                    }
-                },
+                containerColor = MiuixTheme.colorScheme.surface,
+                // 底栏不在根级 bottomBar 槽位渲染：进子页面时槽位瞬间清空会让底栏突兀消失。
+                // 它属于主 Tab 页场景本身（参考项目 MiuixMainContent 的标准结构），随页面过渡一起进出场，
+                // 见 HyperMarketContent 主 Tab 分支。
                 snackbarHost = { SnackbarHost(snackbarHostState) },
             ) { paddingValues ->
-                val pageModifier = if (isAboutPage || isArticlePage) {
-                    Modifier.fillMaxSize()
-                } else {
-                    Modifier.fillMaxSize().padding(paddingValues)
-                }
-                    Box(pageModifier) {
+                // 详情/子页等自带 TopAppBar 的页面需要全屏（TopAppBar 自管状态栏内边距），
+                // 根级 padding 只交给主 Tab 页使用，避免状态栏内边距被垫两次出现大片空白。
+                Box(Modifier.fillMaxSize()) {
                         HyperMarketContent(
                             HyperMarketContentState(
-                                route = route,
-                                displayedDetailApp = displayedDetailApp,
-                                displayedArticleId = displayedArticleId,
+                                backStack = backStack,
+                                rootPadding = paddingValues,
                                 selectedTab = selectedTab,
                                 searchSession = searchSession,
                                 searchListState = searchListState,
@@ -277,5 +250,6 @@ fun HyperMarketApp(
             showLaunchDialog = false
         }
         InstallResultDialog()
+        }
     }
 }

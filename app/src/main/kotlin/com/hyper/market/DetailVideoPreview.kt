@@ -31,6 +31,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.hyper.market.model.DetailVideo
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun DetailVideoPreview(video: DetailVideo) {
@@ -150,7 +151,7 @@ private fun ClosedVideoCard(onOpen: () -> Unit) {
     Box(
         modifier = Modifier.width(VIDEO_WIDTH).height(VIDEO_HEIGHT)
             .clip(RoundedCornerShape(VIDEO_RADIUS))
-            .background(Color(0xFF252525)),
+            .background(MiuixTheme.colorScheme.surfaceContainerHigh),
         contentAlignment = Alignment.Center,
     ) {
         ActionPill("重新打开", onOpen)
@@ -159,6 +160,6 @@ private fun ClosedVideoCard(onOpen: () -> Unit) {
 
 private val VIDEO_WIDTH = 220.dp
 private val VIDEO_HEIGHT = 390.dp
-private val VIDEO_RADIUS = 24.dp
-private val VIDEO_CONTROL_PADDING = 10.dp
-private val VIDEO_BUTTON_GAP = 6.dp
+private val VIDEO_RADIUS = 16.dp
+private val VIDEO_CONTROL_PADDING = 8.dp
+private val VIDEO_BUTTON_GAP = 8.dp

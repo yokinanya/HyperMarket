@@ -1,87 +1,64 @@
 package com.hyper.market
 
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 @Composable
 fun SettingsPage(
     settings: AppSettings,
     scrollState: ScrollState,
+    topPadding: Dp,
+    bottomBarHeight: Dp,
     onSettingsChange: (AppSettings) -> Unit,
     onOpenDestination: (SettingsDestination) -> Unit,
 ) {
-    val compactTitle by remember { derivedStateOf { scrollState.value > 90 } }
-    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(start = 12.dp, top = 38.dp, end = 12.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            PageTitle("设置")
-            Column(
-                modifier = Modifier.offset(y = (-20.25).dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SectionLabel("更新")
-                    SettingsUpdateSection(settings, onSettingsChange, onOpenDestination)
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SectionLabel("搜索")
-                    SearchSettings(settings, onSettingsChange)
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SectionLabel("应用详情")
-                    DetailSettings(settings, onSettingsChange)
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SectionLabel("通用")
-                    GeneralSettings(settings, onSettingsChange, onOpenDestination)
-                }
-            }
+    // 参考项目标准（Hyper-pick-up MiuixPreferenceSection/MiuixSettingsGroup）：
+    // 滚动容器无横向边距，顶部留 topPadding、底部余量 48dp；
+    // 小标题用 miuix SmallTitle 自带内边距（横向 28dp、纵向 8dp）；
+    // 分组卡片各自 padding(horizontal = 12.dp) + padding(bottom = 12.dp) 形成分组节奏。
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(top = topPadding, bottom = 48.dp + bottomBarHeight),
+    ) {
+        SettingsSection("更新") {
+            SettingsUpdateSection(settings, onSettingsChange, onOpenDestination)
         }
-        AnimatedVisibility(
-            visible = compactTitle,
-            enter = fadeIn(tween(180)),
-            modifier = Modifier.align(Alignment.TopCenter),
-        ) {
-            Text(
-                "设置",
-                color = MiuixTheme.colorScheme.onBackground,
-                fontSize = 26.sp,
-                modifier = Modifier.padding(top = 10.dp),
-            )
+        SettingsSection("搜索") {
+            SearchSettings(settings, onSettingsChange)
         }
+        SettingsSection("应用详情") {
+            DetailSettings(settings, onSettingsChange)
+        }
+        SettingsSection("通用") {
+            GeneralSettings(settings, onSettingsChange, onOpenDestination)
+        }
+    }
+}
+
+@Composable
+private fun SettingsSection(title: String, content: @Composable () -> Unit) {
+    Column {
+        SectionLabel(title)
+        content()
     }
 }
 
@@ -144,38 +121,38 @@ private fun GeneralSettings(
     onSettingsChange: (AppSettings) -> Unit,
     onOpenDestination: (SettingsDestination) -> Unit,
 ) {
-    var showStartPageDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
     SettingCard {
-        SettingHomeRow(settings.startPage) {
-            showStartPageDialog = true
-        }
+        // miuix 官方下拉选择组件（示例 DropdownSection 标准），替代自绘展开菜单。
+        OverlayDropdownPreference(
+            title = "首页",
+            summary = "启动时打开的页面",
+            items = listOf("今日", "更新", "搜索"),
+            selectedIndex = settings.startPage.coerceIn(0, 2),
+            onSelectedIndexChange = { page -> onSettingsChange(settings.copy(startPage = page)) },
+        )
         SettingSwitchRow("优化应用名称", "移除推广语，名称本身含横线的可能会误裁", settings.optimizeNames) {
             onSettingsChange(settings.copy(optimizeNames = it))
         }
         SettingLinkRow(SettingsDestination.DEVICE, onOpenDestination)
         SettingLinkRow(SettingsDestination.INSTALLER, onOpenDestination)
         SettingLinkRow(SettingsDestination.SAVED, onOpenDestination)
+        SettingSwitchRow("预测性返回手势", "返回时显示跟随手势的缩放与位移动画", settings.predictiveBack) {
+            onSettingsChange(settings.copy(predictiveBack = it))
+        }
         SettingSwitchRow("小米超级岛优化", "请确保授权 Shizuku 或使用模块绕过白名单", settings.xiaomiIslandOptimization) {
             onSettingsChange(settings.copy(xiaomiIslandOptimization = it))
         }
         SettingLinkRow(SettingsDestination.ABOUT, onOpenDestination)
-    }
-    if (showStartPageDialog) {
-        StartPageDialog(
-            selectedPage = settings.startPage,
-            onDismiss = { showStartPageDialog = false },
-            onSelected = { page ->
-                showStartPageDialog = false
-                onSettingsChange(settings.copy(startPage = page))
-            },
-        )
     }
 }
 
 @Composable
 private fun SettingCard(content: @Composable () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .padding(bottom = 12.dp),
     ) {
         Column { content() }
     }
@@ -199,19 +176,4 @@ private fun SettingLinkRow(destination: SettingsDestination, onOpen: (SettingsDe
 @Composable
 private fun SettingLinkRow(title: String, summary: String, onClick: () -> Unit) {
     ArrowPreference(title = title, summary = summary, onClick = onClick)
-}
-
-@Composable
-private fun SettingHomeRow(startPage: Int, onClick: () -> Unit) {
-    val value = when (startPage) {
-        1 -> "更新"
-        2 -> "搜索"
-        else -> "今日"
-    }
-    ArrowPreference(
-        title = "首页",
-        summary = "启动时打开的页面",
-        endActions = { Text(value) },
-        onClick = onClick,
-    )
 }

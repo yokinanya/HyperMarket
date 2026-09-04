@@ -3,7 +3,10 @@ package com.hyper.market
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 import android.content.Context
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +16,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
@@ -24,8 +29,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.market.api.XiaomiApiClient
@@ -44,6 +52,8 @@ internal fun SearchPage(
     settings: AppSettings,
     apiClient: XiaomiApiClient,
     packageVisibilityRefresh: Int,
+    topPadding: Dp,
+    bottomBarHeight: Dp,
     onOpenDetail: (MarketAppInfo) -> Unit,
     onInstall: (MarketAppInfo) -> Unit,
     onOpenInstalled: (MarketAppInfo) -> Unit,
@@ -131,119 +141,132 @@ internal fun SearchPage(
             }.toMap()
         }
     }
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize().padding(start = 12.dp, top = 38.dp, end = 12.dp),
-        contentPadding = PaddingValues(bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            PageTitle("搜索", bottomPadding = SEARCH_TITLE_BOTTOM_PADDING)
-            SearchField(
-                value = keyword,
-                editing = editing,
-                onEditingChange = {
-                    val focused = it
-                    editing = focused
-                    if (focused) showHistory = keyword.isEmpty()
-                },
-                onValueChange = {
-                    keyword = it
-                    if (it.isBlank()) {
-                        requestGeneration += 1
-                        searchJob?.cancel()
-                        searchJob = null
-                        session.clearResults()
-                        showHistory = history.isNotEmpty() && editing
-                    }
-                },
-                onSearch = { search(keepInputOpen = editing) },
-                onClear = {
-                    keyword = ""
-                    requestGeneration += 1
-                    searchJob?.cancel()
-                    searchJob = null
-                    session.clearResults()
-                    showHistory = history.isNotEmpty() && editing
-                },
-                onCancel = {
-                    keyboard?.hide()
-                    requestGeneration += 1
-                    searchJob?.cancel()
-                    searchJob = null
-                    session.clearResults()
-                    keyword = ""
-                    editing = false
-                    showHistory = history.isNotEmpty()
-                },
-            )
-        }
-        if (showHistory && keyword.isEmpty() && history.isNotEmpty()) {
-            item {
-                HistoryHeader(onClear = {
-                    history = emptyList()
-                    store.writeSearchHistory(emptyList())
-                    showHistory = false
-                })
-            }
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(history, key = { it }) { item ->
-                        HistoryChip(item) {
-                            keyword = item
-                            search(item, keepInputOpen = true)
+    val density = LocalDensity.current
+    // 固定搜索栏总高（InputField 最小高 45dp + 底部间距 12dp；onSizeChanged 校正）。
+    var searchHeaderHeight by remember { mutableStateOf(57.dp) }
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .scrollEndHaptic()
+                .overScrollVertical()
+                .padding(start = 12.dp, end = 12.dp),
+            contentPadding = PaddingValues(top = topPadding + searchHeaderHeight, bottom = 12.dp + bottomBarHeight),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (showHistory && keyword.isEmpty() && history.isNotEmpty()) {
+                item {
+                    HistoryHeader(onClear = {
+                        history = emptyList()
+                        store.writeSearchHistory(emptyList())
+                        showHistory = false
+                    })
+                }
+                item {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(history, key = { it }) { item ->
+                            HistoryChip(item) {
+                                keyword = item
+                                search(item, keepInputOpen = true)
+                            }
                         }
                     }
                 }
             }
-        }
-        error?.let { message ->
-            item { Text(message, color = MiuixTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
-        }
-        if (loading) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(28.dp),
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    CircularProgressIndicator()
+            error?.let { message ->
+                item { Text(message, color = MiuixTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
+            }
+            if (loading) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(28.dp),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
                 }
             }
-        }
-        if (!loading && searchedKeyword.isNotBlank() && visibleResults.isEmpty() && error == null) {
-            item {
-                Text(
-                    "未找到结果",
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    fontSize = 18.sp,
-                    modifier = Modifier.padding(12.dp),
+            if (!loading && searchedKeyword.isNotBlank() && visibleResults.isEmpty() && error == null) {
+                item {
+                    Text(
+                        "未找到结果",
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        fontSize = 18.sp,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
+            items(visibleResults, key = { it.getPackageName() }) { app ->
+                val installedVersion = installedVersions[app.getPackageName()]
+                val action = when {
+                    installedVersion == null -> SearchAction.INSTALL
+                    app.getVersionCode() > installedVersion -> SearchAction.UPDATE
+                    else -> SearchAction.OPEN
+                }
+                SearchResultCard(
+                    app = app,
+                    action = action,
+                    onOpenDetail = onOpenDetail,
+                    onInstall = onInstall,
+                    onOpenInstalled = onOpenInstalled,
                 )
             }
-        }
-        items(visibleResults, key = { it.getPackageName() }) { app ->
-            val installedVersion = installedVersions[app.getPackageName()]
-            val action = when {
-                installedVersion == null -> SearchAction.INSTALL
-                app.getVersionCode() > installedVersion -> SearchAction.UPDATE
-                else -> SearchAction.OPEN
-            }
-            SearchResultCard(
-                app = app,
-                action = action,
-                onOpenDetail = onOpenDetail,
-                onInstall = onInstall,
-                onOpenInstalled = onOpenInstalled,
-            )
-        }
-        if (searchedKeyword.isNotBlank() && hasMore) {
-            item {
-                ActionPill(if (loading) "加载中…" else "加载更多") {
-                    search(searchedKeyword, page + 1)
+            if (searchedKeyword.isNotBlank() && hasMore) {
+                item {
+                    ActionPill(if (loading) "加载中…" else "加载更多") {
+                        search(searchedKeyword, page + 1)
+                    }
                 }
+            }
+        }
+        // 搜索栏固定在顶部（与顶栏标题一样不随内容滚动）：列表内容从其下方滚过，
+        // 不透明 surface 打底遮蔽；topPadding 使其紧贴可折叠顶栏底部，随顶栏收合上移。
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = topPadding),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onSizeChanged { searchHeaderHeight = with(density) { it.height.toDp() } }
+                    .background(MiuixTheme.colorScheme.surface)
+                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+            ) {
+                SearchField(
+                    value = keyword,
+                    editing = editing,
+                    onEditingChange = {
+                        val focused = it
+                        editing = focused
+                        if (focused) {
+                            showHistory = keyword.isEmpty()
+                        } else {
+                            // 收起（返回手势）= 旧“取消”按钮的完整收尾逻辑；
+                            // InputField 收起时会自行清空输入并放弃焦点。
+                            keyboard?.hide()
+                            requestGeneration += 1
+                            searchJob?.cancel()
+                            searchJob = null
+                            session.clearResults()
+                            showHistory = history.isNotEmpty()
+                        }
+                    },
+                    onValueChange = {
+                        keyword = it
+                        if (it.isBlank()) {
+                            // 输入框内清除图标走这里：取消任务并清空结果。
+                            requestGeneration += 1
+                            searchJob?.cancel()
+                            searchJob = null
+                            session.clearResults()
+                            showHistory = history.isNotEmpty()
+                        }
+                    },
+                    onSearch = { search(keepInputOpen = editing) },
+                )
             }
         }
     }
 }
 
 private const val MAX_HISTORY = 8
-private val SEARCH_TITLE_BOTTOM_PADDING = 15.dp

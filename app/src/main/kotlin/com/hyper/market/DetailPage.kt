@@ -1,12 +1,6 @@
 package com.hyper.market
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -16,32 +10,28 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.IntOffset
 import com.hyper.market.api.XiaomiApiClient
 import com.hyper.market.model.MarketAppDetails
 import com.hyper.market.model.MarketAppInfo
@@ -52,11 +42,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.VerticalDivider
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.window.WindowDialog
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.hyper.market.installer.DownloadNotificationReceiver
 import com.hyper.market.installer.DownloadTaskRegistry
 
@@ -76,7 +66,7 @@ fun DetailPage(
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val compactTitle by remember { derivedStateOf { scrollState.value > 120 } }
+    val scrollBehavior = MiuixScrollBehavior()
     LaunchedEffect(app) {
         try {
             details = withContext(Dispatchers.IO) { loadRemoteDetail(app, apiClient) }
@@ -91,10 +81,36 @@ fun DetailPage(
         detail.versionCode,
         packageVisibilityRefresh,
     ) { detailActionState(context, detail) }
-    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+    // 顶栏实时模糊（miuix-blur textureBlur，MGAide 同款）：API 33+ 启用，低版本降级纯色。
+    // TopAppBar（topBar 槽位）与内容盒（blurSource）是 Scaffold 的同级子节点，无自采样。
+    val blur = rememberBarBlur()
+    top.yukonga.miuix.kmp.basic.Scaffold(
+        topBar = {
+            TopAppBar(
+                title = displayName,
+                scrollBehavior = scrollBehavior,
+                modifier = Modifier.barBlurMaterial(blur, MiuixTheme.colorScheme.surface),
+                color = if (blur.enabled) Color.Transparent else MiuixTheme.colorScheme.surface,
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(MiuixIcons.Back, contentDescription = "返回", modifier = Modifier.size(24.dp))
+                    }
+                },
+            )
+        },
+    ) { paddingValues ->
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 12.dp, vertical = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .blurSource(blur)
+                .scrollEndHaptic()
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .verticalScroll(scrollState)
+                .padding(top = paddingValues.calculateTopPadding() + 12.dp, bottom = paddingValues.calculateBottomPadding() + 24.dp)
+                .padding(horizontal = 12.dp),
+            // 分区间距与设置页卡片节奏一致（12dp）。
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             DetailHeader(detail, displayName, actionState, onInstall, onOpenInstalled)
             DetailStats(detail)
@@ -117,46 +133,6 @@ fun DetailPage(
             DetailInfoSection(detail, details?.privacyUrl.orEmpty())
             details?.let { OptionalDetailSections(it, settings, onOpenDetail) }
         }
-        AnimatedVisibility(
-            visible = compactTitle,
-            enter = fadeIn(tween(180)),
-            modifier = Modifier.align(Alignment.TopCenter),
-        ) {
-            CompactDetailBar(detail, displayName, actionState, onInstall, onOpenInstalled)
-        }
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 3.dp).size(48.dp),
-        ) {
-            Icon(MiuixIcons.Back, contentDescription = "返回", modifier = Modifier.size(24.dp))
-        }
-    }
-}
-
-@Composable
-private fun CompactDetailBar(
-    app: MarketAppInfo,
-    displayName: String,
-    actionState: DetailActionState,
-    onInstall: (MarketAppInfo) -> Unit,
-    onOpenInstalled: (MarketAppInfo) -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(COMPACT_DETAIL_BAR_HEIGHT)
-            .background(MiuixTheme.colorScheme.background),
-    ) {
-        Text(
-            displayName,
-            fontSize = 25.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.align(Alignment.Center),
-        )
-        Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)) {
-            DetailActionGroup(app, actionState, onInstall, onOpenInstalled)
-        }
     }
 }
 
@@ -169,20 +145,21 @@ private fun DetailHeader(
     onOpenInstalled: (MarketAppInfo) -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 36.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top,
     ) {
         DetailAppIcon(app)
         Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
             Text(
                 displayName,
-                style = detailHeaderTextStyle(24.sp),
+                // 字号对齐设置页标题体系上限（20sp），不再用 24sp 大字。
+                fontSize = 20.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 app.getPublisherName(),
-                style = detailHeaderTextStyle(14.sp),
+                fontSize = 14.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -195,11 +172,6 @@ private fun DetailHeader(
     }
 }
 
-private fun detailHeaderTextStyle(fontSize: androidx.compose.ui.unit.TextUnit) = TextStyle(
-    fontSize = fontSize,
-    platformStyle = PlatformTextStyle(includeFontPadding = false),
-)
-
 @Composable
 private fun DetailStats(app: MarketAppInfo) {
     val stats = listOf(
@@ -208,14 +180,21 @@ private fun DetailStats(app: MarketAppInfo) {
         formatSize(app.getApkSize()) to "大小",
         app.getAgeClassification().ifEmpty { "—" } to "年龄分级",
     )
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        stats.forEachIndexed { index, stat ->
-            if (index > 0) {
-                Spacer(
-                    Modifier.width(1.dp).height(64.dp).background(MiuixTheme.colorScheme.dividerLine),
-                )
+    // 卡片化 + 字号对齐设置页（数值 17sp=行标题、标签 14sp=行摘要）。
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            stats.forEachIndexed { index, stat ->
+                if (index > 0) {
+                    VerticalDivider(
+                        modifier = Modifier.height(36.dp),
+                        thickness = 1.dp,
+                    )
+                }
+                StatItem(stat.first, stat.second)
             }
-            StatItem(stat.first, stat.second)
         }
     }
 }
@@ -223,7 +202,7 @@ private fun DetailStats(app: MarketAppInfo) {
 @Composable
 private fun RowScope.StatItem(value: String, label: String) {
     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontSize = 24.sp, color = MiuixTheme.colorScheme.onBackground, maxLines = 1)
+        Text(value, fontSize = 17.sp, color = MiuixTheme.colorScheme.onSurface, maxLines = 1)
         Text(label, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, maxLines = 1)
     }
 }
@@ -253,7 +232,6 @@ private fun formatSize(bytes: Long): String =
     if (bytes > 0) String.format(Locale.CHINA, "%.1fMB", bytes / BYTES_PER_MB.toDouble()) else "—"
 
 private const val MAX_DETAIL_COMMENTS = 5
-private val COMPACT_DETAIL_BAR_HEIGHT = 56.dp
 private const val BYTES_PER_MB = 1024L * 1024L
 private const val TEN_THOUSAND = 10_000L
 private const val HUNDRED_MILLION = 100_000_000L

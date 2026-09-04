@@ -1,7 +1,6 @@
 package com.hyper.market
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,7 +36,7 @@ internal fun ManualUpdateCard(apiClient: XiaomiApiClient, onInstall: (MarketAppI
     var updateApp by remember { mutableStateOf<MarketAppInfo?>(null) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.5.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
         ManualInput(packageName, { packageName = it }, "包名（packageName）")
         Spacer(Modifier.height(12.dp))
         ManualInput(versionCode, { versionCode = it }, "版本号（versionCode）")
@@ -109,15 +108,10 @@ private fun ManualInput(value: String, onValueChange: (String) -> Unit, hint: St
 
 @Composable
 private fun FullWidthAction(label: String, onClick: () -> Unit) {
+    // miuix Button 默认规格：MinHeight 40dp、InsideMargin(horizontal 16, vertical 13)、圆角 16dp。
     Button(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(43.dp),
-        cornerRadius = 32.dp,
-        minWidth = 0.dp,
-        minHeight = 43.dp,
+        modifier = Modifier.fillMaxWidth(),
         colors = ButtonDefaults.buttonColorsPrimary(),
-        insideMargin = PaddingValues(0.dp),
-    ) { Text(label, fontSize = 18.sp) }
+    ) { Text(label, fontSize = 17.sp) }
 }

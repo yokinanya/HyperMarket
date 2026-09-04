@@ -7,8 +7,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
@@ -20,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.market.api.XiaomiApiClient
@@ -27,7 +29,6 @@ import com.hyper.market.model.MarketAppInfo
 import com.hyper.market.model.UpdateInfo
 import kotlinx.coroutines.CancellationException
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private sealed interface UpdatesState {
@@ -46,6 +47,8 @@ fun UpdatesPage(
     apiClient: XiaomiApiClient,
     updateStore: UpdateStore,
     packageVisibilityRefresh: Int = 0,
+    topPadding: Dp,
+    bottomBarHeight: Dp,
     onOpenDetail: (MarketAppInfo) -> Unit,
     onInstall: (MarketAppInfo) -> Unit,
     onInstallAll: (List<MarketAppInfo>) -> Unit,
@@ -54,7 +57,6 @@ fun UpdatesPage(
     val application = context.applicationContext as MarketApplication
     var refreshRequestId by remember { mutableIntStateOf(0) }
     var handledRefreshRequestId by remember { mutableIntStateOf(0) }
-    var isRefreshing by remember { mutableStateOf(false) }
     var state by remember { mutableStateOf<UpdatesState>(UpdatesState.Loading) }
     LaunchedEffect(
         refreshRequestId,
@@ -84,38 +86,26 @@ fun UpdatesPage(
         } catch (exception: Exception) {
             val message = exception.message ?: "更新检查失败"
             fallback?.copy(refreshError = message) ?: UpdatesState.Failed(message)
-        } finally {
-            isRefreshing = false
         }
     }
     when (val current = state) {
         UpdatesState.Loading -> UpdatesLoading()
-        is UpdatesState.Failed -> UpdatesError(current.message) { refreshRequestId++ }
-        is UpdatesState.Loaded -> PullToRefresh(
-            isRefreshing = isRefreshing,
-            refreshTexts = EMPTY_REFRESH_TEXTS,
-            onRefresh = {
-                isRefreshing = true
-                refreshRequestId++
+        is UpdatesState.Failed -> UpdatesError(current.message, topPadding, bottomBarHeight) { refreshRequestId++ }
+        is UpdatesState.Loaded -> UpdatesList(
+            current.updates,
+            settings.optimizeNames,
+            topPadding,
+            bottomBarHeight,
+            onOpenDetail,
+            onInstall,
+            onInstallAll,
+            refreshError = current.refreshErrorMessage(),
+            onRetry = { refreshRequestId++ },
+            onIgnore = { update, permanent ->
+                updateStore.ignore(update, permanent)
+                state = current.copy(updates = current.updates - update)
             },
-        ) {
-            UpdatesList(
-                current.updates,
-                settings.optimizeNames,
-                onOpenDetail,
-                onInstall,
-                onInstallAll,
-                refreshError = current.refreshErrorMessage(),
-                onRetry = {
-                    isRefreshing = true
-                    refreshRequestId++
-                },
-                onIgnore = { update, permanent ->
-                    updateStore.ignore(update, permanent)
-                    state = current.copy(updates = current.updates - update)
-                },
-            )
-        }
+        )
     }
 }
 
@@ -123,6 +113,8 @@ fun UpdatesPage(
 private fun UpdatesList(
     updates: List<UpdateInfo>,
     optimizeNames: Boolean,
+    topPadding: Dp,
+    bottomBarHeight: Dp,
     onOpenDetail: (MarketAppInfo) -> Unit,
     onInstall: (MarketAppInfo) -> Unit,
     onInstallAll: (List<MarketAppInfo>) -> Unit,
@@ -135,12 +127,13 @@ private fun UpdatesList(
         state = listState,
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 12.dp, top = 38.dp, end = 12.dp),
-        contentPadding = PaddingValues(bottom = 12.dp),
+            .scrollEndHaptic()
+            .overScrollVertical()
+            .padding(start = 12.dp, end = 12.dp),
+        contentPadding = PaddingValues(top = topPadding, bottom = 12.dp + bottomBarHeight),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            PageTitle("更新")
             UpdateHeader(updates, onInstallAll)
         }
         if (refreshError != null) {
@@ -149,9 +142,9 @@ private fun UpdatesList(
         if (updates.isEmpty()) {
             item { EmptyUpdates() }
         } else {
-            items(updates, key = { it.app.packageName }) { update ->
-                UpdateCard(
-                    update = update,
+            item {
+                MergedUpdateCard(
+                    updates = updates,
                     optimizeNames = optimizeNames,
                     onOpenDetail = onOpenDetail,
                     onInstall = onInstall,
@@ -204,11 +197,15 @@ private fun UpdatesLoading() {
 }
 
 @Composable
-private fun UpdatesError(message: String, onRetry: () -> Unit) {
-    PageColumn {
-        PageTitle("更新")
-        Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
-            Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+private fun UpdatesError(message: String, topPadding: Dp, bottomBarHeight: Dp, onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = 12.dp, top = topPadding, end = 12.dp, bottom = 12.dp + bottomBarHeight),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("更新检查失败", fontSize = 20.sp)
                 Text(message, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                 ActionPill("重试", onRetry)
@@ -235,5 +232,3 @@ internal fun formatBytes(bytes: Long): String {
         "%.1fMB".format(java.util.Locale.CHINA, megabytes)
     }
 }
-
-private val EMPTY_REFRESH_TEXTS = List(4) { "" }
