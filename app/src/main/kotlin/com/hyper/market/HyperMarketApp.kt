@@ -57,7 +57,6 @@ fun HyperMarketApp(
     val settingsScrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
     var operation by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
-    var showLaunchDialog by remember { androidx.compose.runtime.mutableStateOf(LaunchDialogHelper.shouldShow(context)) }
 
     LaunchedEffect(profile) { apiClient.setProfile(profile.source, profile.overrides) }
 
@@ -244,10 +243,6 @@ fun HyperMarketApp(
                         )
                     }
             }
-        }
-        LaunchNotice(showLaunchDialog) {
-            LaunchDialogHelper.markShown(context)
-            showLaunchDialog = false
         }
         InstallResultDialog()
         }
